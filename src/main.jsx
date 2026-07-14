@@ -734,13 +734,6 @@ function App() {
           人员映射
         </button>
         <button
-          className={`tab-button ${activeTab === "upload" ? "active" : ""}`}
-          onClick={() => setActiveTab("upload")}
-        >
-          <FileUp size={18} />
-          新增
-        </button>
-        <button
           className={`tab-button ${activeTab === "status" ? "active" : ""}`}
           onClick={() => setActiveTab("status")}
         >
@@ -753,6 +746,13 @@ function App() {
         >
           <UsersRound size={18} />
           绘图人动态
+        </button>
+        <button
+          className={`tab-button ${activeTab === "upload" ? "active" : ""}`}
+          onClick={() => setActiveTab("upload")}
+        >
+          <FileUp size={18} />
+          新增
         </button>
         <button
           className={`tab-button ${activeTab === "drawing" ? "active" : ""}`}
