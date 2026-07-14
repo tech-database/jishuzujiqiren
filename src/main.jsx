@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
-  ArrowRight,
   Bot,
   CheckCircle2,
   ClipboardCheck,
+  Copy,
   Database,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   FileUp,
   Images,
@@ -17,14 +19,39 @@ import {
   RefreshCw,
   Save,
   Search,
+  Server,
   Settings2,
   ShieldCheck,
-  UploadCloud,
+  Timer,
   UserRoundCheck,
   UsersRound,
+  Workflow,
   X,
 } from "lucide-react";
+import { LightFallBackground } from "./components/design-system";
+import {
+  AnimatedNumber,
+  HoverCard,
+  LiveLog,
+  PageTransition,
+  ProgressAnimation,
+  StatusPulse,
+} from "./components/motion";
+import { ErrorBoundary } from "./components/system/ErrorBoundary.jsx";
+import { getImportFileKey, validateImportFiles } from "./utils/importFileUtils";
+import { buildImportSuccessText, sanitizeImportError } from "./utils/importResultUtils";
+import { parseMaterialCodes as parseMaterialCodeSummary, removeMaterialCodeAtIndex } from "./utils/materialCodeUtils";
+import { sanitizeAssignmentError } from "./utils/assignmentResultUtils";
 import "./styles.css";
+
+const MappingStudio = React.lazy(() => import("./components/field-mapping/MappingStudio.jsx"));
+const MonitoringCenter = React.lazy(() => import("./components/monitoring/MonitoringCenter.jsx"));
+const ConnectionManagementCenter = React.lazy(() => import("./components/connection/ConnectionManagementCenter.jsx"));
+const CommandCenter = React.lazy(() => import("./components/commands/CommandCenter.jsx"));
+const PeopleMappingCenter = React.lazy(() => import("./components/people/PeopleMappingCenter.jsx"));
+const DrawingOperationsCenter = React.lazy(() => import("./components/drawing/DrawingOperationsCenter.jsx"));
+const DataImportCenter = React.lazy(() => import("./components/import-write/DataImportCenter.jsx"));
+const DrawingAssignmentCenter = React.lazy(() => import("./components/assignment/DrawingAssignmentCenter.jsx"));
 
 const emptyConfig = {
   appId: "",
@@ -152,6 +179,629 @@ function TableSelector({ value, onChange }) {
   );
 }
 
+function ConnectionMetricCard({ icon: Icon, title, status, detail, meta, tone = "neutral" }) {
+  return (
+    <article className={`connection-metric-card ${tone}`}>
+      <div className="metric-card-head">
+        <span className="metric-icon">
+          <Icon size={24} />
+        </span>
+        <Pill tone={tone === "success" ? "success" : tone === "error" ? "warning" : "neutral"} icon={Activity}>
+          {status}
+        </Pill>
+      </div>
+      <div className="metric-card-body">
+        <strong>{title}</strong>
+        <span>{detail}</span>
+      </div>
+      <div className="metric-card-meta">
+        <Timer size={16} />
+        {meta}
+      </div>
+    </article>
+  );
+}
+
+function ConfigGroup({ icon: Icon, title, description, children }) {
+  return (
+    <section className="config-group-card">
+      <div className="config-group-head">
+        <span className="config-group-icon">
+          <Icon size={22} />
+        </span>
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+      </div>
+      <div className="config-field-stack">{children}</div>
+    </section>
+  );
+}
+
+function ControlField({
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  secret = false,
+  revealed = false,
+  onToggleReveal,
+  onCopy,
+}) {
+  const filled = Boolean(String(value || "").trim());
+  const inputType = secret && !revealed ? "password" : type;
+  return (
+    <label className="control-field">
+      <span className="control-field-label">
+        <strong>{label}</strong>
+        {hint && <small>{hint}</small>}
+      </span>
+      <span className={`control-input-shell ${filled ? "verified" : "empty"}`}>
+        <input
+          type={inputType}
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <span className="control-verify" title={filled ? "已填写" : "待填写"} />
+        {secret && (
+          <button type="button" className="control-tool-button" onClick={onToggleReveal} aria-label="显示或隐藏">
+            {revealed ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        )}
+        <button
+          type="button"
+          className="control-tool-button"
+          onClick={onCopy}
+          disabled={!filled}
+          aria-label="复制"
+        >
+          <Copy size={18} />
+        </button>
+      </span>
+    </label>
+  );
+}
+
+function ConnectionCenter({
+  connected,
+  configReady,
+  healthStatus,
+  healthLoading,
+  bitableFields,
+  targetTable,
+  setTargetTable,
+  config,
+  updateConfig,
+  secretVisible,
+  setSecretVisible,
+  copyConfigValue,
+  copiedField,
+  checkState,
+  saveState,
+  saving,
+  savingConfig,
+  checking,
+  saveConfig,
+  checkConnection,
+  formatDisplayTime,
+}) {
+  return (
+    <section className="connection-center page-enter">
+      <div className="page-section-header">
+        <div className="section-title-block">
+          <span className="section-icon">
+            <Link2 size={24} />
+          </span>
+          <div>
+            <h2>Robot Connection Center</h2>
+            <p>管理机器人与飞书、多维表格和 Excel 数据流的连接状态。</p>
+          </div>
+        </div>
+        <div className="header-status">
+          <Pill tone={connected || configReady ? "success" : "warning"} icon={CheckCircle2}>
+            {connected ? "连接成功" : configReady ? "配置已保存" : "等待连接"}
+          </Pill>
+          <Pill tone={healthStatus?.ok ? "success" : "warning"} icon={Activity}>
+            {healthLoading && !healthStatus ? "检测中" : healthStatus?.label || "等待检测"}
+          </Pill>
+        </div>
+      </div>
+
+      <section className="connection-dashboard" aria-label="连接健康 Dashboard">
+        <ConnectionMetricCard
+          icon={MessageSquareText}
+          title="飞书连接"
+          status={healthStatus?.ok ? "检测通过" : "等待检测"}
+          tone={healthStatus?.ok ? "success" : "neutral"}
+          detail={healthStatus?.label || "等待飞书服务健康检测"}
+          meta={`最近检测 ${formatDisplayTime(healthStatus?.checkedAt)}`}
+        />
+        <ConnectionMetricCard
+          icon={FileSpreadsheet}
+          title="Excel 数据源"
+          status={configReady ? "已配置" : "等待配置"}
+          tone={configReady ? "success" : "neutral"}
+          detail={bitableFields.length > 0 ? `已读取 ${bitableFields.length} 个字段` : "等待连接后读取字段"}
+          meta={`目标表 ${targetTable === "board" ? "胶板" : "油漆"}`}
+        />
+        <ConnectionMetricCard
+          icon={Workflow}
+          title="数据同步"
+          status={checking || savingConfig ? "处理中" : "等待触发"}
+          tone={checking || savingConfig ? "neutral" : configReady ? "success" : "neutral"}
+          detail={checking ? "正在测试连接并读取字段" : savingConfig ? "正在保存配置" : "机器人自动化链路待命"}
+          meta={checkState?.ok ? "检测刚刚完成" : "等待检测"}
+        />
+      </section>
+
+      {healthStatus && (
+        <section className="card connection-health-panel" aria-label="飞书连接健康检查">
+          <div className="section-head">
+            <div>
+              <h2>Live Health Signals</h2>
+              <p>飞书开放平台、数据权限与网络连通性的实时检查结果。</p>
+            </div>
+            <Pill tone={healthStatus.ok ? "success" : "warning"} icon={Server}>
+              {healthStatus.ok ? "服务正常" : "需要处理"}
+            </Pill>
+          </div>
+          <div className="health-grid">
+            {Object.entries(healthStatus.checks || {}).map(([key, item]) => (
+              <div className={`health-item ${item.ok ? "ok" : "error"}`} key={key}>
+                <span>{item.ok ? "正常" : "异常"}</span>
+                <strong>{item.message}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="connection-config-layout">
+        <ConfigGroup
+          icon={Bot}
+          title="基础配置"
+          description="机器人应用身份与密钥管理。密钥留空时不会覆盖已保存值。"
+        >
+          <ControlField
+            label="App ID"
+            hint="飞书应用凭证"
+            placeholder="请输入 App ID"
+            value={config.appId}
+            onChange={(value) => updateConfig("appId", value)}
+            onCopy={() => copyConfigValue("appId", config.appId)}
+          />
+          <ControlField
+            label="App Secret"
+            hint={config.appSecretSet ? "已保存密钥，可留空保持不变" : "首次配置需要填写"}
+            placeholder={config.appSecretSet ? "已保存 ******" : "请输入 App Secret"}
+            value={config.appSecret}
+            secret
+            revealed={secretVisible}
+            onToggleReveal={() => setSecretVisible((current) => !current)}
+            onChange={(value) => updateConfig("appSecret", value)}
+            onCopy={() => copyConfigValue("appSecret", config.appSecret)}
+          />
+        </ConfigGroup>
+
+        <ConfigGroup
+          icon={Database}
+          title="飞书数据表"
+          description="胶板业务主表，用于新增写入、字段映射与状态同步。"
+        >
+          <ControlField
+            label="多维表 App Token"
+            hint="目标多维表 token"
+            placeholder="请输入多维表 App Token"
+            value={config.bitableAppToken}
+            onChange={(value) => updateConfig("bitableAppToken", value)}
+            onCopy={() => copyConfigValue("bitableAppToken", config.bitableAppToken)}
+          />
+          <ControlField
+            label="Table ID"
+            hint="目标数据表 ID"
+            placeholder="请输入 Table ID"
+            value={config.bitableTableId}
+            onChange={(value) => updateConfig("bitableTableId", value)}
+            onCopy={() => copyConfigValue("bitableTableId", config.bitableTableId)}
+          />
+        </ConfigGroup>
+
+        <ConfigGroup
+          icon={Images}
+          title="油漆数据表"
+          description="油漆业务表连接，用于同一套机器人流程的分表写入。"
+        >
+          <ControlField
+            label="油漆 App Token"
+            hint="油漆多维表 token"
+            placeholder="请输入油漆多维表 App Token"
+            value={config.paintBitableAppToken}
+            onChange={(value) => updateConfig("paintBitableAppToken", value)}
+            onCopy={() => copyConfigValue("paintBitableAppToken", config.paintBitableAppToken)}
+          />
+          <ControlField
+            label="油漆 Table ID"
+            hint="油漆数据表 ID"
+            placeholder="请输入油漆 Table ID"
+            value={config.paintBitableTableId}
+            onChange={(value) => updateConfig("paintBitableTableId", value)}
+            onCopy={() => copyConfigValue("paintBitableTableId", config.paintBitableTableId)}
+          />
+        </ConfigGroup>
+      </section>
+
+      <section className="card connection-ops-panel">
+        <div className="ops-panel-main">
+          <div className="section-title-block">
+            <span className="section-icon">
+              <ShieldCheck size={24} />
+            </span>
+            <div>
+              <h2>Connection Operations</h2>
+              <p>选择目标表后保存配置或执行连接测试，测试成功后会读取字段用于映射。</p>
+            </div>
+          </div>
+          <div className="target-table-row">
+            <span>当前测试表</span>
+            <TableSelector value={targetTable} onChange={setTargetTable} />
+          </div>
+          {copiedField && <div className="inline-result ok">已复制 {copiedField}</div>}
+          {(checkState || saveState) && (
+            <div className={`inline-result ${(checkState || saveState).ok ? "ok" : "error"}`}>
+              {(checkState || saveState).text}
+            </div>
+          )}
+          <ProgressBar active={savingConfig} label="正在保存配置" />
+          <ProgressBar active={checking} label="正在测试连接并读取字段" />
+        </div>
+        <div className="connection-action-stack">
+          <button className="button secondary" onClick={() => saveConfig()} disabled={saving}>
+            <Save size={18} />
+            {saving ? "保存中" : "保存配置"}
+          </button>
+          <button className="button primary" onClick={checkConnection} disabled={checking}>
+            <KeyRound size={18} />
+            {checking ? "检查中" : "测试连接"}
+          </button>
+        </div>
+      </section>
+
+      <section className="workflow-strip" aria-label="机器人使用方式">
+        <span>
+          <FileSpreadsheet size={18} />
+          @机器人 胶板新增 / 油漆新增
+        </span>
+        <span>
+          <Link2 size={18} />
+          上传 Excel
+        </span>
+        <span>
+          <CheckCircle2 size={18} />
+          @机器人 完成
+        </span>
+        <span>
+          <Images size={18} />
+          @机器人 料号 领图
+        </span>
+      </section>
+    </section>
+  );
+}
+
+function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult, ownerStats }) {
+  const taskLabels = {
+    connection: "Connection Center",
+    mapping: "AI Field Mapping",
+    commands: "Command Center",
+    people: "Identity Mapping",
+    status: "Robot Monitoring",
+    owners: "Drawing Operations",
+    upload: "Data Import",
+    drawing: "Drawing Assignment",
+  };
+  const completed = statusResult?.summary?.done ?? ownerStats?.summary?.todayCompleted ?? null;
+  const total = statusResult?.summary?.total ?? null;
+  const completionRate =
+    typeof completed === "number" && typeof total === "number" && total > 0
+      ? (completed / total) * 100
+      : null;
+  const statusLabel = healthStatus?.ok ? "检测通过" : configReady ? "等待检测" : "未知状态";
+
+  return (
+    <aside className="robot-status-widget" aria-label="Robot status">
+      <StatusPulse
+        tone={healthStatus?.ok ? "online" : configReady ? "running" : "standby"}
+        label={statusLabel}
+        detail={taskLabels[activeTab] || "Control Center"}
+      />
+      <div className="robot-status-metrics">
+        <span>
+          <small>运行时间</small>
+          <strong>当前接口未提供</strong>
+        </span>
+        <span>
+          <small>今日完成</small>
+          {typeof completed === "number" ? <AnimatedNumber value={completed} /> : <strong>暂无数据</strong>}
+        </span>
+        <span>
+          <small>完成率</small>
+          {typeof completionRate === "number" ? (
+            <AnimatedNumber value={completionRate} decimals={1} suffix="%" />
+          ) : (
+            <strong>暂无数据</strong>
+          )}
+        </span>
+      </div>
+    </aside>
+  );
+}
+
+function MonitoringMetricCard({ title, value, tone = "neutral", suffix = "" }) {
+  const hasValue = typeof value === "number" && Number.isFinite(value);
+  return (
+    <HoverCard className={`monitor-metric-card ${tone}`}>
+      <span>{title}</span>
+      {hasValue ? <AnimatedNumber value={value} suffix={suffix} /> : <strong>暂无数据</strong>}
+      <div className="metric-empty-note">当前接口未提供趋势数据</div>
+    </HoverCard>
+  );
+}
+
+function buildMonitoringLogs({ backgroundSyncStatus, statusResult, statusState, formatDisplayTime }) {
+  const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  const logs = [];
+
+  if (backgroundSyncStatus?.running) {
+    logs.push({
+      id: "running",
+      time: now,
+      message: "后台检测正在运行",
+      tone: "running",
+    });
+  }
+  if (statusResult?.summary) {
+    logs.push({
+      id: "summary",
+      time: now,
+      message: `检测结果已更新：共 ${statusResult.summary.total} 项，绘图中 ${statusResult.summary.drawing} 项，已完成 ${statusResult.summary.done} 项`,
+      tone: "success",
+    });
+  }
+  if (backgroundSyncStatus?.lastCheckedAt) {
+    logs.push({
+      id: "checked",
+      time: formatDisplayTime(backgroundSyncStatus.lastCheckedAt).split(" ").pop() || now,
+      message: "最近一次后台检测完成",
+      tone: "info",
+    });
+  }
+  if (backgroundSyncStatus?.lastChangedAt) {
+    logs.push({
+      id: "changed",
+      time: formatDisplayTime(backgroundSyncStatus.lastChangedAt).split(" ").pop() || now,
+      message: "检测到任务状态发生变化",
+      tone: "running",
+    });
+  }
+  if (backgroundSyncStatus?.lastError) {
+    logs.push({
+      id: "error",
+      time: now,
+      message: `后台检测异常：${backgroundSyncStatus.lastError}`,
+      tone: "error",
+    });
+  }
+  if (statusState?.text) {
+    logs.push({
+      id: "status-state",
+      time: now,
+      message: statusState.text,
+      tone: statusState.ok ? "success" : "error",
+    });
+  }
+  return logs.slice(0, 6);
+}
+function StatusMonitoringCenter({
+  configReady,
+  targetTable,
+  setTargetTable,
+  statusDateRange,
+  setStatusDateRange,
+  statusSyncing,
+  backgroundSyncStatus,
+  statusResult,
+  statusState,
+  syncDrawingStatus,
+  formatDisplayTime,
+}) {
+  const summary = statusResult?.summary || { total: null, unclaimed: null, drawing: null, done: null };
+  const hasStatusSummary = typeof summary.total === "number";
+  const abnormal = hasStatusSummary
+    ? Math.max(0, summary.total - summary.unclaimed - summary.drawing - summary.done)
+    : null;
+  const completionRate = hasStatusSummary && summary.total > 0 ? (summary.done / summary.total) * 100 : null;
+  const healthLabel = backgroundSyncStatus?.lastError
+    ? "异常待处理"
+    : backgroundSyncStatus?.lastCheckedAt
+      ? "已检测"
+      : "等待检测";
+  const logs = buildMonitoringLogs({ backgroundSyncStatus, statusResult, statusState, formatDisplayTime });
+
+  return (
+    <PageTransition className="monitoring-center">
+      <div className="page-section-header">
+        <div className="section-title-block">
+          <span className="section-icon">
+            <Activity size={24} />
+          </span>
+          <div>
+            <h2>Robot Monitoring Center</h2>
+            <p>实时检测绘图状态、同步飞书数据，并监控自动化链路健康度。</p>
+          </div>
+        </div>
+        <StatusPulse
+          tone={statusSyncing ? "running" : backgroundSyncStatus?.lastCheckedAt ? "online" : "standby"}
+          label={statusSyncing ? "检测中" : configReady ? "等待检测" : "未知状态"}
+          detail={backgroundSyncStatus?.running ? "后台检测运行中" : "暂无实时状态"}
+        />
+      </div>
+
+      <section className="monitoring-metrics">
+        <MonitoringMetricCard title="检测总数" value={summary.total} tone="neutral" />
+        <MonitoringMetricCard title="绘图中" value={summary.drawing} tone="warning" />
+        <MonitoringMetricCard title="已完成" value={summary.done} tone="success" />
+        <MonitoringMetricCard title="异常" value={abnormal} tone={abnormal > 0 ? "danger" : "success"} />
+      </section>
+
+      <section className="monitoring-grid">
+        <HoverCard className="monitor-panel progress-panel" as="section">
+          <div className="section-head">
+            <div>
+              <h2>Task Completion</h2>
+              <p>根据当前检测结果计算完成率，并随数据同步实时更新。</p>
+            </div>
+            <Pill tone={configReady ? "neutral" : "warning"} icon={ShieldCheck}>
+              {configReady ? "配置已填写" : "等待配置"}
+            </Pill>
+          </div>
+          <div className="progress-panel-body">
+            {typeof completionRate === "number" ? (
+              <ProgressAnimation value={completionRate} label="完成率" />
+            ) : (
+              <div className="progress-empty-state">暂无数据</div>
+            )}
+            <div className="monitor-detail-stack">
+              <span>
+                <strong>{formatDisplayTime(backgroundSyncStatus?.lastCheckedAt)}</strong>
+                <small>最近检测</small>
+              </span>
+              <span>
+                <strong>{formatDisplayTime(backgroundSyncStatus?.lastFinishedAt)}</strong>
+                <small>最近完成</small>
+              </span>
+              <span>
+                <strong>{backgroundSyncStatus?.intervalMs ? `${Math.round(backgroundSyncStatus.intervalMs / 1000)}s` : "暂无数据"}</strong>
+                <small>检测间隔</small>
+              </span>
+            </div>
+          </div>
+        </HoverCard>
+
+        <HoverCard className="monitor-panel health-panel" as="section">
+          <div className="section-head">
+            <div>
+              <h2>System Health</h2>
+              <p>异常监控、后台同步和飞书数据读写状态。</p>
+            </div>
+            <StatusPulse
+              tone={backgroundSyncStatus?.lastError ? "error" : backgroundSyncStatus?.lastCheckedAt ? "online" : "standby"}
+              label={healthLabel}
+              detail="系统健康"
+            />
+          </div>
+          <div className="health-meter">
+            <span style={{ width: backgroundSyncStatus?.lastCheckedAt ? "100%" : "0%" }} />
+          </div>
+          <div className="monitor-detail-stack compact">
+            <span>
+                <strong>{backgroundSyncStatus?.lastError ? "异常待处理" : backgroundSyncStatus?.lastCheckedAt ? "无异常" : "暂无数据"}</strong>
+                <small>异常监控</small>
+              </span>
+            <span>
+              <strong>{backgroundSyncStatus?.running ? "运行中" : "待命"}</strong>
+              <small>后台任务</small>
+            </span>
+          </div>
+        </HoverCard>
+      </section>
+
+      <section className="card monitor-control-panel">
+        <div className="status-filter-bar">
+          <FieldRow label="开始日期" hint="默认前天">
+            <input
+              type="date"
+              value={statusDateRange.startDate}
+              onChange={(event) =>
+                setStatusDateRange((current) => ({ ...current, startDate: event.target.value }))
+              }
+            />
+          </FieldRow>
+          <FieldRow label="结束日期" hint="默认今天">
+            <input
+              type="date"
+              value={statusDateRange.endDate}
+              onChange={(event) =>
+                setStatusDateRange((current) => ({ ...current, endDate: event.target.value }))
+              }
+            />
+          </FieldRow>
+          <div className="target-table-row">
+            <span>查询表</span>
+            <TableSelector value={targetTable} onChange={setTargetTable} />
+          </div>
+        </div>
+        <ProgressBar active={statusSyncing} label="正在检测并同步图纸状态" />
+        <div className="connection-actions">
+          {statusState && (
+            <div className={`inline-result ${statusState.ok ? "ok" : "error"}`}>
+              {statusState.text}
+            </div>
+          )}
+          <div className="action-buttons">
+            <button
+              className="button primary"
+              onClick={() => syncDrawingStatus()}
+              disabled={statusSyncing || !configReady}
+            >
+              <RefreshCw size={18} />
+              {statusSyncing ? "检测中" : "立即检测"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="monitoring-grid logs-grid">
+        <HoverCard className="monitor-panel live-log-panel" as="section">
+          <div className="section-head">
+            <div>
+              <h2>Live Operation Log</h2>
+              <p>机器人检测、同步与异常事件会在这里形成实时日志流。</p>
+            </div>
+          </div>
+          <LiveLog items={logs} />
+          {logs.length === 0 && <div className="monitor-empty-state">暂无日志数据</div>}
+        </HoverCard>
+        <HoverCard className="monitor-panel anomaly-panel" as="section">
+          <div className="section-head">
+            <div>
+              <h2>Anomaly Watch</h2>
+              <p>聚合未领取、绘图中、已完成和异常状态，辅助判断生产阻塞。</p>
+            </div>
+          </div>
+          <div className="anomaly-stack">
+            <StatusPulse
+              tone={typeof summary.unclaimed === "number" && summary.unclaimed > 0 ? "running" : hasStatusSummary ? "online" : "standby"}
+              label={typeof summary.unclaimed === "number" ? `${summary.unclaimed} 未领取` : "暂无数据"}
+            />
+            <StatusPulse
+              tone={typeof summary.drawing === "number" && summary.drawing > 0 ? "running" : "standby"}
+              label={typeof summary.drawing === "number" ? `${summary.drawing} 绘图中` : "暂无数据"}
+            />
+            <StatusPulse
+              tone={typeof abnormal === "number" && abnormal > 0 ? "error" : hasStatusSummary ? "online" : "standby"}
+              label={typeof abnormal === "number" ? `${abnormal} 异常` : "暂无数据"}
+            />
+          </div>
+        </HoverCard>
+      </section>
+    </PageTransition>
+  );
+}
+
 const feishuCommands = [
   {
     title: "新增写入",
@@ -206,6 +856,7 @@ const feishuCommands = [
 function App() {
   const [status, setStatus] = useState(null);
   const [config, setConfig] = useState(emptyConfig);
+  const [configBaseline, setConfigBaseline] = useState(emptyConfig);
   const [configLoading, setConfigLoading] = useState(false);
   const [saveState, setSaveState] = useState(null);
   const [checkState, setCheckState] = useState(null);
@@ -221,7 +872,6 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [draggingUpload, setDraggingUpload] = useState(false);
   const [uploadState, setUploadState] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, fileName: "" });
   const [claimForm, setClaimForm] = useState({
     materialCodes: "",
     senderName: "",
@@ -240,6 +890,9 @@ function App() {
   const [ownerStatsState, setOwnerStatsState] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [secretVisible, setSecretVisible] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+  const copiedFieldTimerRef = useRef(null);
   const [statusDateRange, setStatusDateRange] = useState(() => {
     const today = new Date();
     return {
@@ -255,7 +908,9 @@ function App() {
       const data = await response.json();
       if (data.ok) {
         setStatus(data.status);
-        setConfig({ ...emptyConfig, ...data.config, appSecret: "" });
+        const loadedConfig = { ...emptyConfig, ...data.config, appSecret: "" };
+        setConfig(loadedConfig);
+        setConfigBaseline(loadedConfig);
         setNameIdRows(mapToNameIdRows(data.config?.nameIdMap || data.status?.nameIdMap));
         if (data.status?.ready) {
           await autoFetchFields(data.status);
@@ -327,56 +982,59 @@ function App() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    return () => window.clearTimeout(copiedFieldTimerRef.current);
+  }, []);
+
   function updateConfig(key, value) {
     setConfig((current) => ({ ...current, [key]: value }));
     setSaveState(null);
     setCheckState(null);
   }
 
-  function updateFieldMapping(bitableField, exportTitle) {
-    setFieldMappings((current) => ({ ...current, [bitableField]: exportTitle }));
-  }
-
-  function updateNameIdRow(index, key, value) {
-    setNameIdRows((current) =>
-      current.map((row, rowIndex) => (rowIndex === index ? { ...row, [key]: value } : row)),
-    );
+  function resetConfigChanges() {
+    setConfig(configBaseline);
     setSaveState(null);
+    setCheckState(null);
   }
 
-  function addNameIdRow() {
-    setNameIdRows((current) => [...current, { id: "", name: "" }]);
-    setSaveState(null);
-  }
-
-  function removeNameIdRow(index) {
-    setNameIdRows((current) => {
-      const next = current.filter((_, rowIndex) => rowIndex !== index);
-      return next.length > 0 ? next : [{ id: "", name: "" }];
-    });
-    setSaveState(null);
-  }
-
-  function formatBytes(size) {
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  async function copyConfigValue(key, value) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(key);
+      window.clearTimeout(copiedFieldTimerRef.current);
+      copiedFieldTimerRef.current = window.setTimeout(() => setCopiedField(null), 1200);
+    } catch {
+      setCopiedField(null);
+    }
   }
 
   function addUploadFiles(files) {
-    const accepted = Array.from(files || []).filter((file) => /\.(xlsx|xls|csv)$/i.test(file.name));
-    if (accepted.length === 0) {
-      setUploadState({ ok: false, text: "请上传 xlsx、xls 或 csv 文件" });
+    const incoming = Array.from(files || []);
+    if (incoming.length === 0) return;
+
+    const { validFiles, errors } = validateImportFiles(incoming);
+    if (errors.length > 0) {
+      setUploadState({
+        ok: false,
+        phase: "validation",
+        text: errors.map((error) => `${error.fileName}: ${error.message}`).join("；"),
+        errors,
+      });
+    }
+    if (validFiles.length === 0) {
       return;
     }
+
     setUploadFiles((current) => {
-      const existing = new Set(current.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+      const existing = new Set(current.map(getImportFileKey));
       return [
         ...current,
-        ...accepted.filter((file) => !existing.has(`${file.name}:${file.size}:${file.lastModified}`)),
+        ...validFiles.filter((file) => !existing.has(getImportFileKey(file))),
       ];
     });
-    setUploadState(null);
+    if (errors.length === 0) setUploadState(null);
   }
 
   function removeUploadFile(fileToRemove) {
@@ -390,20 +1048,27 @@ function App() {
   }
 
   function updateClaimForm(key, value) {
+    if (key === "dismissState") {
+      setClaimState(null);
+      return;
+    }
     setClaimForm((current) => ({ ...current, [key]: value }));
     setClaimState(null);
     setClaimQueryResult(null);
   }
 
   function parseMaterialCodes(value) {
-    return [
-      ...new Set(
-        String(value || "")
-          .split(/[\s,，、。;；|/\\]+/)
-          .map((item) => item.trim())
-          .filter(Boolean),
-      ),
-    ];
+    return parseMaterialCodeSummary(value).uniqueCodes;
+  }
+
+  function removeClaimMaterialCode(index) {
+    updateClaimForm("materialCodes", removeMaterialCodeAtIndex(claimForm.materialCodes, index));
+  }
+
+  function clearClaimForm() {
+    setClaimForm({ materialCodes: "", senderName: "" });
+    setClaimState(null);
+    setClaimQueryResult(null);
   }
 
   function requestAdminPassword() {
@@ -431,7 +1096,9 @@ function App() {
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
       setStatus(data.status);
-      setConfig({ ...emptyConfig, ...data.config, appSecret: "" });
+      const savedConfig = { ...emptyConfig, ...data.config, appSecret: "" };
+      setConfig(savedConfig);
+      setConfigBaseline(savedConfig);
       setNameIdRows(mapToNameIdRows(data.config?.nameIdMap));
       setSaveState({ ok: true, text: "配置已保存" });
       return true;
@@ -477,17 +1144,31 @@ function App() {
 
   async function uploadSpreadsheets() {
     if (uploadFiles.length === 0) {
-      setUploadState({ ok: false, text: "请先拖入或选择 Excel 文件" });
+      setUploadState({ ok: false, phase: "select", text: "请先拖入或选择 Excel / CSV 文件" });
+      return;
+    }
+    const { errors } = validateImportFiles(uploadFiles);
+    if (errors.length > 0) {
+      setUploadState({
+        ok: false,
+        phase: "validation",
+        text: errors.map((error) => `${error.fileName}: ${error.message}`).join("；"),
+        errors,
+      });
       return;
     }
     setUploading(true);
-    setUploadState(null);
-    setUploadProgress({ current: 0, total: uploadFiles.length, fileName: "" });
+    setUploadState({ ok: null, phase: "submit", text: "正在提交文件" });
     const results = [];
     try {
       for (let index = 0; index < uploadFiles.length; index += 1) {
         const file = uploadFiles[index];
-        setUploadProgress({ current: index, total: uploadFiles.length, fileName: file.name });
+        setUploadState({
+          ok: null,
+          phase: "server",
+          text: `服务端处理中 ${index + 1}/${uploadFiles.length}：${file.name}`,
+          fileName: file.name,
+        });
         const response = await fetch(
           `/api/upload-spreadsheet?fileName=${encodeURIComponent(file.name)}&tableKey=${encodeURIComponent(targetTable)}`,
           {
@@ -496,24 +1177,32 @@ function App() {
           body: await file.arrayBuffer(),
           },
         );
-        const data = await response.json();
-        if (!data.ok) throw new Error(`${file.name}: ${data.error}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          const error = new Error(`${file.name}: ${data.error || response.statusText || "服务端处理失败"}`);
+          error.fileName = file.name;
+          error.status = response.status;
+          error.phase = "server";
+          throw error;
+        }
         results.push(data);
-        setUploadProgress({ current: index + 1, total: uploadFiles.length, fileName: file.name });
       }
-      const total = results.reduce((sum, item) => sum + item.count, 0);
-      const warnings = results.flatMap((item) => item.warnings || []);
       setUploadState({
         ok: true,
-        text:
-          warnings.length > 0
-            ? `写入完成：${results.length} 个文件，共 ${total} 条记录；${warnings.length} 个图片未上传，需开通飞书图片上传权限`
-            : `写入完成：${results.length} 个文件，共 ${total} 条记录`,
+        phase: "complete",
+        text: buildImportSuccessText(results),
+        results,
       });
       setUploadFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
-      setUploadState({ ok: false, text: error.message });
+      setUploadState({
+        ok: false,
+        phase: error.phase || "server",
+        text: sanitizeImportError(error),
+        fileName: error.fileName,
+        status: error.status,
+      });
     } finally {
       setUploading(false);
     }
@@ -522,7 +1211,7 @@ function App() {
   async function claimDrawing() {
     const materialCodes = parseMaterialCodes(claimForm.materialCodes);
     if (materialCodes.length === 0) {
-      setClaimState({ ok: false, text: "请输入至少一个料号" });
+      setClaimState({ ok: false, operation: "claim", text: "请输入至少一个料号" });
       return;
     }
     setClaiming(true);
@@ -541,10 +1230,12 @@ function App() {
       if (!data.ok) throw new Error(data.error);
       setClaimState({
         ok: true,
+        operation: "claim",
         text: `领图成功：${data.materialCodes.join("，")}，共更新 ${data.count} 条记录`,
+        data,
       });
     } catch (error) {
-      setClaimState({ ok: false, text: error.message });
+      setClaimState({ ok: false, operation: "claim", text: sanitizeAssignmentError(error) });
     } finally {
       setClaiming(false);
     }
@@ -553,7 +1244,7 @@ function App() {
   async function completeDrawing() {
     const materialCodes = parseMaterialCodes(claimForm.materialCodes);
     if (materialCodes.length === 0) {
-      setClaimState({ ok: false, text: "请输入至少一个料号" });
+      setClaimState({ ok: false, operation: "complete", text: "请输入至少一个料号" });
       return;
     }
     setCompletingDrawing(true);
@@ -568,10 +1259,12 @@ function App() {
       if (!data.ok) throw new Error(data.error);
       setClaimState({
         ok: true,
+        operation: "complete",
         text: `绘图完成：${data.materialCodes.join("，")}，共更新 ${data.count} 条记录`,
+        data,
       });
     } catch (error) {
-      setClaimState({ ok: false, text: error.message });
+      setClaimState({ ok: false, operation: "complete", text: sanitizeAssignmentError(error) });
     } finally {
       setCompletingDrawing(false);
     }
@@ -591,11 +1284,13 @@ function App() {
       if (!data.ok) throw new Error(data.error);
       setClaimState({
         ok: true,
+        operation: "query",
         text: data.count > 0 ? `查询完成：共 ${data.count} 条图纸未被领取` : "查询完成：没有未领取图纸",
+        data,
       });
       setClaimQueryResult(data);
     } catch (error) {
-      setClaimState({ ok: false, text: error.message });
+      setClaimState({ ok: false, operation: "query", text: sanitizeAssignmentError(error) });
     } finally {
       setQueryingClaims(false);
     }
@@ -663,9 +1358,6 @@ function App() {
 
   const configReady = Boolean(status?.ready);
   const connected = Boolean(checkState?.ok);
-  const claimCodes = parseMaterialCodes(claimForm.materialCodes);
-  const uploadPercent =
-    uploadProgress.total > 0 ? (uploadProgress.current / uploadProgress.total) * 100 : 0;
   const savingConfig = saving && !checking;
 
   useEffect(() => {
@@ -690,7 +1382,9 @@ function App() {
   }, [activeTab, configReady]);
 
   return (
-    <main className="app-shell">
+    <>
+      <LightFallBackground />
+      <main className="app-shell">
       <header className="page-header">
         <div className="header-main">
           <div className="app-mark">
@@ -710,6 +1404,14 @@ function App() {
           </Pill>
         </div>
       </header>
+
+      <RobotStatusWidget
+        activeTab={activeTab}
+        configReady={configReady}
+        healthStatus={healthStatus}
+        statusResult={statusResult}
+        ownerStats={ownerStats}
+      />
 
       <ProgressBar active={configLoading} label="正在刷新配置" />
 
@@ -774,6 +1476,42 @@ function App() {
       </nav>
 
       {activeTab === "connection" && (
+        <React.Suspense
+          fallback={
+            <section className="connection-loading-shell card">
+              <span />
+              <span />
+              <span />
+            </section>
+          }
+        >
+          <ConnectionManagementCenter
+            configReady={configReady}
+            healthStatus={healthStatus}
+            healthLoading={healthLoading}
+            bitableFields={bitableFields}
+            targetTable={targetTable}
+            setTargetTable={setTargetTable}
+            TableSelector={TableSelector}
+            config={config}
+            configBaseline={configBaseline}
+            updateConfig={updateConfig}
+            resetConfig={resetConfigChanges}
+            copyConfigValue={copyConfigValue}
+            copiedField={copiedField}
+            checkState={checkState}
+            saveState={saveState}
+            saving={saving}
+            savingConfig={savingConfig}
+            checking={checking}
+            saveConfig={saveConfig}
+            checkConnection={checkConnection}
+            formatDisplayTime={formatDisplayTime}
+          />
+        </React.Suspense>
+      )}
+
+      {false && activeTab === "connection" && (
         <section className="tab-panel">
           <section className="card connection-card">
             <div className="section-head">
@@ -895,247 +1633,101 @@ function App() {
       )}
 
       {activeTab === "mapping" && (
-        <section className="card mapping-section">
-          <div className="section-head mapping-head">
-            <div>
-              <h2>字段映射</h2>
-              <p>设置 Excel 列标题与飞书多维表字段的对应关系，留空则默认使用同名字段。</p>
-            </div>
-            <Pill tone="neutral" icon={Database}>
-              {bitableFields.length} 个字段
-            </Pill>
-          </div>
-
-          <div className="data-grid" role="table" aria-label="字段映射">
-            <div className="data-header" role="row">
-              <span role="columnheader">Excel 字段</span>
-              <span role="columnheader">连接</span>
-              <span role="columnheader">飞书字段</span>
-            </div>
-            <div className="data-body">
-              {bitableFields.map((field) => (
-                <div className="data-row" role="row" key={field}>
-                  <div className="excel-cell" role="cell">
-                    <input
-                      className="mapping-input"
-                      value={fieldMappings[field] || ""}
-                      onChange={(event) => updateFieldMapping(field, event.target.value)}
-                      placeholder={field}
-                    />
-                  </div>
-                  <div className="connector-cell" role="cell" aria-hidden="true">
-                    <span className="connector-line" />
-                    <span className="connector-node">
-                      <ArrowRight size={15} />
-                    </span>
-                  </div>
-                  <div className="feishu-cell" role="cell">
-                    <span className="field-tag">{field}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        <React.Suspense
+          fallback={
+            <section className="mapping-loading-state card">
+              <span />
+              <span />
+              <span />
+            </section>
+          }
+        >
+          <MappingStudio
+            bitableFields={bitableFields}
+            fieldMappings={fieldMappings}
+            backendFieldMap={status?.fieldMap || {}}
+            onFieldMappingsChange={setFieldMappings}
+            onSave={saveConfig}
+            onLoadFields={checkConnection}
+            saving={saving}
+            loading={checking || configLoading}
+            configReady={configReady}
+            saveState={saveState}
+            checkState={checkState}
+          />
+        </React.Suspense>
       )}
 
       {activeTab === "people" && (
-        <section className="card mapping-section">
-          <div className="section-head mapping-head">
-            <div>
-              <h2>名字和 ID 映射</h2>
-              <p>领图时会先按发送人 ID 查找名字；找到名字就写入名字，找不到才写入 ID。</p>
-            </div>
-            <Pill tone="neutral" icon={UsersRound}>
-              {Object.keys(buildNameIdMap(nameIdRows)).length} 组映射
-            </Pill>
-          </div>
-
-          <div className="people-map-list" aria-label="名字和 ID 映射关系表">
-            <div className="people-map-header">
-              <span>名字</span>
-              <span>飞书用户 ID</span>
-              <span>操作</span>
-            </div>
-            {nameIdRows.map((row, index) => (
-              <div className="people-map-row" key={index}>
-                <input
-                  value={row.name}
-                  placeholder="例如：张三"
-                  onChange={(event) => updateNameIdRow(index, "name", event.target.value)}
-                />
-                <input
-                  value={row.id}
-                  placeholder="例如：ou_xxx 或 open_id"
-                  onChange={(event) => updateNameIdRow(index, "id", event.target.value)}
-                />
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label="删除映射"
-                  title="删除映射"
-                  onClick={() => removeNameIdRow(index)}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <ProgressBar active={savingConfig} label="正在保存人员映射" />
-
-          <div className="connection-actions">
-            {saveState && (
-              <div className={`inline-result ${saveState.ok ? "ok" : "error"}`}>
-                {saveState.text}
-              </div>
-            )}
-            <div className="action-buttons">
-              <button className="button secondary" type="button" onClick={addNameIdRow}>
-                <Plus size={18} />
-                添加一行
-              </button>
-              <button className="button primary" onClick={() => saveConfig()} disabled={saving}>
-                <Save size={18} />
-                {saving ? "保存中" : "保存映射"}
-              </button>
-            </div>
-          </div>
-        </section>
+        <React.Suspense fallback={<div className="glass-skeleton people-skeleton" />}>
+          <PeopleMappingCenter
+            rows={nameIdRows}
+            baselineRows={mapToNameIdRows(configBaseline.nameIdMap)}
+            loading={configLoading}
+            saving={saving}
+            saveState={saveState}
+            onRowsChange={(updater) => {
+              setNameIdRows(updater);
+              setSaveState(null);
+            }}
+            onSave={() => saveConfig()}
+            onReset={() => {
+              setNameIdRows(mapToNameIdRows(configBaseline.nameIdMap));
+              setSaveState(null);
+            }}
+          />
+        </React.Suspense>
       )}
 
       {activeTab === "upload" && (
-        <section className="tab-panel upload-panel">
-          <section className="card connection-card">
-            <div className="section-head">
-              <div>
-                <h2>新增写入</h2>
-                <p>拖入 Excel 或 CSV 文件，系统会解析表头、套用字段映射，并把记录写入目标多维表。</p>
-              </div>
-              <Pill tone={configReady ? "success" : "warning"} icon={FileSpreadsheet}>
-                {configReady ? "可上传" : "需先配置"}
-              </Pill>
-            </div>
-
-            <div className="target-table-row">
-              <span>写入到</span>
-              <TableSelector value={targetTable} onChange={setTargetTable} />
-            </div>
-
-            <div
-              className={`upload-dropzone ${draggingUpload ? "dragging" : ""}`}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setDraggingUpload(true);
-              }}
-              onDragOver={(event) => event.preventDefault()}
-              onDragLeave={(event) => {
-                event.preventDefault();
-                setDraggingUpload(false);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDraggingUpload(false);
-                addUploadFiles(event.dataTransfer.files);
-              }}
-            >
-              <UploadCloud size={38} />
-              <strong>拖动文件到这里上传</strong>
-              <span>支持 xlsx、xls、csv，可一次放入多个文件</span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                multiple
-                onChange={(event) => addUploadFiles(event.target.files)}
-              />
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <FileSpreadsheet size={18} />
-                选择文件
-              </button>
-            </div>
-
-            {uploadFiles.length > 0 && (
-              <div className="upload-list" aria-label="待上传文件">
-                {uploadFiles.map((file) => (
-                  <div className="upload-file" key={`${file.name}:${file.size}:${file.lastModified}`}>
-                    <FileSpreadsheet size={18} />
-                    <span>
-                      <strong>{file.name}</strong>
-                      <small>{formatBytes(file.size)}</small>
-                    </span>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      aria-label={`移除 ${file.name}`}
-                      title="移除"
-                      onClick={() => removeUploadFile(file)}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <ProgressBar
-              active={uploading}
-              label={
-                uploadProgress.fileName
-                  ? `正在写入 ${uploadProgress.current + 1 > uploadProgress.total ? uploadProgress.total : uploadProgress.current + 1}/${uploadProgress.total}：${uploadProgress.fileName}`
-                  : "正在准备写入"
-              }
-              value={uploadPercent}
-            />
-
-            <div className="connection-actions">
-              {uploadState && (
-                <div className={`inline-result ${uploadState.ok ? "ok" : "error"}`}>
-                  {uploadState.text}
-                </div>
-              )}
-              <div className="action-buttons">
-                <button className="button secondary" onClick={clearUploadFiles} disabled={uploading}>
-                  <X size={18} />
-                  清空
-                </button>
-                <button
-                  className="button primary"
-                  onClick={uploadSpreadsheets}
-                  disabled={uploading || !configReady}
-                >
-                  <UploadCloud size={18} />
-                  {uploading ? "写入中" : "开始写入"}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <aside className="workflow-card">
-            <h2>写入规则</h2>
-            <div className="workflow-list">
-              <span>
-                <FileSpreadsheet size={18} />
-                自动识别首个工作表
-              </span>
-              <span>
-                <Database size={18} />
-                使用字段映射
-              </span>
-              <span>
-                <Images size={18} />
-                支持表格内图片
-              </span>
-            </div>
-          </aside>
-        </section>
+        <React.Suspense fallback={<div className="glass-skeleton import-skeleton" />}>
+          <DataImportCenter
+            files={uploadFiles}
+            dragging={draggingUpload}
+            uploading={uploading}
+            uploadState={uploadState}
+            targetTable={targetTable}
+            setTargetTable={setTargetTable}
+            tableSelector={<TableSelector value={targetTable} onChange={setTargetTable} />}
+            configReady={configReady}
+            fileInputRef={fileInputRef}
+            onDragStateChange={setDraggingUpload}
+            onFilesSelected={addUploadFiles}
+            onRemoveFile={removeUploadFile}
+            onClearFiles={clearUploadFiles}
+            onSubmit={uploadSpreadsheets}
+            onDismissError={() => setUploadState(null)}
+          />
+        </React.Suspense>
       )}
 
       {activeTab === "status" && (
+        <React.Suspense
+          fallback={
+            <section className="monitoring-loading-shell card">
+              <span />
+              <span />
+              <span />
+            </section>
+          }
+        >
+          <MonitoringCenter
+            configReady={configReady}
+            targetTable={targetTable}
+            setTargetTable={setTargetTable}
+            statusDateRange={statusDateRange}
+            setStatusDateRange={setStatusDateRange}
+            statusSyncing={statusSyncing}
+            backgroundSyncStatus={backgroundSyncStatus}
+            statusResult={statusResult}
+            statusState={statusState}
+            syncDrawingStatus={syncDrawingStatus}
+            formatDisplayTime={formatDisplayTime}
+          />
+        </React.Suspense>
+      )}
+
+      {false && activeTab === "status" && (
         <section className="card mapping-section status-section">
             <div className="section-head mapping-head">
               <div>
@@ -1239,255 +1831,55 @@ function App() {
       )}
 
       {activeTab === "owners" && (
-        <section className="card mapping-section owner-section">
-          <div className="section-head mapping-head">
-            <div>
-              <h2>绘图人动态检测</h2>
-              <p>自动读取清单里出现过的绘图人，显示当前绘图状态、今日接图和今日完成数量。</p>
-            </div>
-            <Pill tone={configReady ? "success" : "warning"} icon={UsersRound}>
-              {configReady ? `${ownerStats?.summary?.owners || 0} 位绘图人` : "需先配置"}
-            </Pill>
-          </div>
-
-          <ProgressBar active={ownerStatsLoading} label="正在读取绘图人动态" />
-
-          {ownerStats?.summary && (
-            <div className="owner-summary-grid">
-              <div className="owner-summary-card drawing">
-                <span>绘图中人员</span>
-                <strong>{ownerStats.summary.drawing}</strong>
-              </div>
-              <div className="owner-summary-card idle">
-                <span>空闲人员</span>
-                <strong>{ownerStats.summary.idle}</strong>
-              </div>
-              <div className="owner-summary-card claimed">
-                <span>今日接图</span>
-                <strong>{ownerStats.summary.todayClaimed}</strong>
-              </div>
-              <div className="owner-summary-card done">
-                <span>今日完成</span>
-                <strong>{ownerStats.summary.todayCompleted}</strong>
-              </div>
-            </div>
-          )}
-
-          <div className="owner-toolbar">
-            <span>上次刷新：{formatDisplayTime(ownerStats?.checkedAt)}</span>
-            <button
-              className="button secondary"
-              type="button"
-              onClick={() => loadDrawingOwnerStats()}
-              disabled={ownerStatsLoading || !configReady}
-            >
-              <RefreshCw size={18} />
-              刷新
-            </button>
-          </div>
-
-          {ownerStatsState && (
-            <div className={`inline-result ${ownerStatsState.ok ? "ok" : "error"}`}>
-              {ownerStatsState.text}
-            </div>
-          )}
-
-          {ownerStats?.items?.length > 0 ? (
-            <div className="owner-grid">
-              {ownerStats.items.map((item) => (
-                <article className={`owner-card ${item.status}`} key={item.owner}>
-                  <div className="owner-card-head">
-                    <div>
-                      <strong>{item.owner}</strong>
-                      <span>{item.status === "drawing" ? `绘图中 ${item.drawingCount} 张` : "空闲"}</span>
-                    </div>
-                    <Pill tone={item.status === "drawing" ? "warning" : "success"} icon={Activity}>
-                      {item.status === "drawing" ? "绘图中" : "空闲"}
-                    </Pill>
-                  </div>
-
-                  <div className="owner-metrics">
-                    <div>
-                      <span>当前</span>
-                      <strong>{item.drawingCount}</strong>
-                    </div>
-                    <div>
-                      <span>今日接图</span>
-                      <strong>{item.todayClaimed}</strong>
-                    </div>
-                    <div>
-                      <span>今日完成</span>
-                      <strong>{item.todayCompleted}</strong>
-                    </div>
-                  </div>
-
-                  {item.activeItems.length > 0 && (
-                    <div className="owner-active-list" aria-label={`${item.owner} 当前绘图`}>
-                      {item.activeItems.slice(0, 6).map((activeItem) => (
-                        <span key={`${activeItem.table}:${activeItem.recordId}`}>
-                          {activeItem.materialCode}
-                        </span>
-                      ))}
-                      {item.activeItems.length > 6 && <span>+{item.activeItems.length - 6}</span>}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="owner-empty">
-              <UsersRound size={28} />
-              <strong>还没有读取到绘图人</strong>
-              <span>清单里出现绘图人后，这里会自动形成状态看板。</span>
-            </div>
-          )}
-        </section>
+        <React.Suspense fallback={<div className="glass-skeleton drawing-skeleton" />}>
+          <DrawingOperationsCenter
+            ownerStats={ownerStats}
+            loading={ownerStatsLoading}
+            errorState={ownerStatsState}
+            configReady={configReady}
+            onRefresh={() => loadDrawingOwnerStats()}
+            formatTime={formatDisplayTime}
+          />
+        </React.Suspense>
       )}
 
       {activeTab === "drawing" && (
-        <section className="tab-panel drawing-panel">
-          <section className="card connection-card">
-            <div className="section-head">
-              <div>
-                <h2>领图登记</h2>
-                <p>提交领图会按料号写入绘图人；绘图完成会把输入料号同步为完成状态。</p>
-              </div>
-              <Pill tone={configReady ? "success" : "warning"} icon={ClipboardCheck}>
-                {configReady ? "可提交" : "需先配置"}
-              </Pill>
-            </div>
-
-            <div className="claim-layout">
-              <FieldRow label="料号" hint="多个料号可用空格、逗号或换行分隔">
-                <textarea
-                  rows={5}
-                  placeholder="例如：I-089F-K42&#10;I-089F-K43"
-                  value={claimForm.materialCodes}
-                  onChange={(event) => updateClaimForm("materialCodes", event.target.value)}
-                />
-              </FieldRow>
-              <FieldRow label="领取人" hint="写入文本字段时使用">
-                <input
-                  placeholder="请输入领取人姓名"
-                  value={claimForm.senderName}
-                  onChange={(event) => updateClaimForm("senderName", event.target.value)}
-                />
-              </FieldRow>
-            </div>
-
-            <ProgressBar active={claiming} label="正在提交领图登记" />
-            <ProgressBar active={completingDrawing} label="正在同步绘图完成状态" />
-            <ProgressBar active={queryingClaims} label="正在查询绘图人领取状态" />
-
-            {claimQueryResult && (
-              <div className="claim-result-list" aria-label="图纸领取查询结果">
-                {claimQueryResult.items.length === 0 && (
-                  <div className="claim-result-item claimed">
-                    <strong>全部图纸</strong>
-                    <span>均已领取</span>
-                  </div>
-                )}
-                {claimQueryResult.items.map((item) => (
-                  <div className="claim-result-item unclaimed" key={item.recordId}>
-                    <strong>{item.materialCode}</strong>
-                    <span>未被领取</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="connection-actions">
-              {claimState && (
-                <div className={`inline-result ${claimState.ok ? "ok" : "error"}`}>
-                  {claimState.text}
-                </div>
-              )}
-              <div className="action-buttons">
-                <button
-                  className="button secondary"
-                  onClick={queryDrawingClaims}
-                  disabled={queryingClaims || claiming || completingDrawing || !configReady}
-                >
-                  <Search size={18} />
-                  {queryingClaims ? "查询中" : "查询全部未领取"}
-                </button>
-                <button
-                  className="button secondary"
-                  onClick={completeDrawing}
-                  disabled={completingDrawing || claiming || queryingClaims || !configReady}
-                >
-                  <CheckCircle2 size={18} />
-                  {completingDrawing ? "同步中" : "绘图完成"}
-                </button>
-                <button
-                  className="button primary"
-                  onClick={claimDrawing}
-                  disabled={claiming || completingDrawing || queryingClaims || !configReady}
-                >
-                  <UserRoundCheck size={18} />
-                  {claiming ? "提交中" : "提交领图"}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <aside className="workflow-card claim-summary">
-            <h2>本次料号</h2>
-            {claimCodes.length > 0 ? (
-              <div className="claim-code-list">
-                {claimCodes.map((code) => (
-                  <span key={code}>{code}</span>
-                ))}
-              </div>
-            ) : (
-              <p>输入料号后，这里会自动整理去重。</p>
-            )}
-          </aside>
-        </section>
+        <React.Suspense fallback={<div className="glass-skeleton assignment-skeleton" />}>
+          <DrawingAssignmentCenter
+            claimForm={claimForm}
+            nameIdRows={nameIdRows}
+            claimState={claimState}
+            claimQueryResult={claimQueryResult}
+            claiming={claiming}
+            completingDrawing={completingDrawing}
+            queryingClaims={queryingClaims}
+            configReady={configReady}
+            updateClaimForm={updateClaimForm}
+            removeMaterialCode={removeClaimMaterialCode}
+            clearClaimForm={clearClaimForm}
+            claimDrawing={claimDrawing}
+            completeDrawing={completeDrawing}
+            queryDrawingClaims={queryDrawingClaims}
+          />
+        </React.Suspense>
       )}
 
       {activeTab === "commands" && (
-        <section className="card mapping-section command-section">
-          <div className="section-head mapping-head">
-            <div>
-              <h2>飞书口令操作</h2>
-              <p>群里 @ 机器人即可触发这些操作；领图相关口令会自动在胶板/油漆表匹配料号，也可以在口令后追加日期范围。</p>
-            </div>
-            <Pill tone="neutral" icon={MessageSquareText}>
-              {feishuCommands.length} 条口令
-            </Pill>
-          </div>
-
-          <div className="command-grid">
-            {feishuCommands.map((item) => (
-              <article className="command-card" key={item.title}>
-                <div className="command-card-head">
-                  <strong>{item.title}</strong>
-                  <code>{item.command}</code>
-                </div>
-                <div className="command-example">
-                  <span>示例</span>
-                  <code>{item.example}</code>
-                </div>
-                <p>{item.result}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="command-note">
-            <strong>注意</strong>
-            <span>
-              新增必须发送胶板新增或油漆新增；领图、绘图完成会自动按料号定位胶板或油漆表，状态检测仍按页面或口令中指定的表执行。
-            </span>
-          </div>
-        </section>
+        <React.Suspense fallback={<div className="glass-skeleton command-skeleton" />}>
+          <CommandCenter commands={feishuCommands} />
+        </React.Suspense>
       )}
 
       <button className="refresh-fab" onClick={loadConfig} aria-label="刷新配置" title="刷新配置">
         <RefreshCw size={18} />
       </button>
-    </main>
+      </main>
+    </>
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);

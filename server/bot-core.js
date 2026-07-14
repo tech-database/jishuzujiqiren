@@ -1161,6 +1161,19 @@ async function uploadBitableImage(token, tableConfig, image) {
   return data.data?.file_token;
 }
 
+function normalizeAttachmentValue(value) {
+  if (Array.isArray(value)) {
+    const attachments = value.filter(
+      (item) => item && typeof item === "object" && typeof item.file_token === "string" && item.file_token.trim(),
+    );
+    return attachments.length > 0 ? attachments : null;
+  }
+  if (value && typeof value === "object" && typeof value.file_token === "string" && value.file_token.trim()) {
+    return [value];
+  }
+  return null;
+}
+
 async function convertRecordByFieldTypes(record, fieldTypes, token, tableConfig, uploadCache, warnings) {
   const converted = {};
   for (const [fieldName, rawValue] of Object.entries(record)) {
@@ -1193,6 +1206,17 @@ async function convertRecordByFieldTypes(record, fieldTypes, token, tableConfig,
         converted[fieldName] = [{ file_token: uploadCache.get(rawValue.__imageId) }];
       } catch (error) {
         const warning = `图片字段「${fieldName}」上传失败，已跳过图片：${error.message}`;
+        warnings.push(warning);
+        console.log(warning);
+      }
+      continue;
+    }
+    if (type === 17) {
+      const attachments = normalizeAttachmentValue(rawValue);
+      if (attachments) {
+        converted[fieldName] = attachments;
+      } else {
+        const warning = `附件字段「${fieldName}」没有可上传的附件对象，已跳过该字段。`;
         warnings.push(warning);
         console.log(warning);
       }

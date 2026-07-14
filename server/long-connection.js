@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -18,6 +18,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.join(__dirname, ".runtime");
 const websocketStatusPath = path.join(runtimeDir, "long-connection-status.json");
+const spreadsheetProcessedPath = path.join(runtimeDir, "spreadsheet-processed.json");
 const REPLY_OK = "\u5199\u5165\u5df2\u7ecf\u5b8c\u6210";
 const ACTIVATION_REPLY = "\u6536\u5230\u65b0\u589e\u6307\u4ee4\uff0c\u8bf7\u4e0a\u4f20\u4f60\u8981\u5199\u5165\u7684 Excel \u8868\u683c\uff0c\u5168\u90e8\u4e0a\u4f20\u540e\u53d1\u9001\uff1a@\u673a\u5668\u4eba \u5b8c\u6210\u3002";
 const NO_FILES_REPLY = "\u672c\u6b21\u65b0\u589e\u672a\u6536\u5230\u4f60\u4e0a\u4f20\u7684 Excel \u8868\u683c\uff0c\u5df2\u7ed3\u675f\u3002";
@@ -25,6 +26,35 @@ const HISTORY_PERMISSION_ERROR =
   "\u65e0\u6cd5\u4e3b\u52a8\u8bfb\u53d6\u7fa4\u6d88\u606f\u5386\u53f2\uff0c\u9700\u8981\u5728\u98de\u4e66\u5f00\u653e\u5e73\u53f0\u4e3a\u5e94\u7528\u5f00\u542f\u6743\u9650 im:message.group_msg\uff0c\u53d1\u5e03\u540e\u91cd\u542f\u673a\u5668\u4eba\u3002";
 const ACTIVATION_TTL_MS = 10 * 60 * 1000;
 const pendingSpreadsheetChats = new Map();
+const processedCompletionMessageIds = new Set();
+const processedFileMessageIds = new Set();
+
+async function loadProcessedSpreadsheetState() {
+  try {
+    const data = JSON.parse(await readFile(spreadsheetProcessedPath, "utf8"));
+    for (const id of data.completions || []) processedCompletionMessageIds.add(id);
+    for (const id of data.files || []) processedFileMessageIds.add(id);
+  } catch {
+    // Runtime idempotency state is best-effort; missing files are normal on first boot.
+  }
+}
+
+async function saveProcessedSpreadsheetState() {
+  await mkdir(runtimeDir, { recursive: true });
+  await writeFile(
+    spreadsheetProcessedPath,
+    JSON.stringify(
+      {
+        updatedAt: new Date().toISOString(),
+        completions: [...processedCompletionMessageIds].slice(-500),
+        files: [...processedFileMessageIds].slice(-1000),
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
 
 async function writeWebsocketStatus(status) {
   await mkdir(runtimeDir, { recursive: true });
@@ -110,6 +140,7 @@ function commandHelpText() {
 console.log("Loading config...");
 ensureConfig();
 console.log("Config loaded.");
+await loadProcessedSpreadsheetState();
 
 console.log("Loading Feishu SDK...");
 const { Client, createLarkChannel } = await import("@larksuiteoapi/node-sdk");
@@ -273,6 +304,7 @@ function isStatusSyncCommand(message) {
 function activateSpreadsheetSession(message) {
   const now = Date.now();
   pendingSpreadsheetChats.set(chatKey(message), {
+    chatId: message.chatId,
     startedAt: now,
     expiresAt: now + ACTIVATION_TTL_MS,
     senderId: message.senderId,
@@ -304,6 +336,19 @@ function endSpreadsheetSession(message) {
   pendingSpreadsheetChats.delete(chatKey(message));
 }
 
+function recoverSpreadsheetSession(message) {
+  const now = Date.now();
+  return {
+    chatId: message.chatId,
+    startedAt: now - ACTIVATION_TTL_MS,
+    expiresAt: now + ACTIVATION_TTL_MS,
+    senderId: message.senderId,
+    tableKey: commandTableKey(message.content),
+    files: [],
+    recovered: true,
+  };
+}
+
 function parseJsonContent(content) {
   if (!content) return {};
   if (typeof content === "object") return content;
@@ -331,6 +376,18 @@ function historyFileMessageToRuntimeMessage(item, chatId, tableKey) {
     content: item?.body?.content || "",
     resources: [{ type: "file", fileKey, fileName }],
     tableKey,
+  };
+}
+
+function historyTextMessageToRuntimeMessage(item, chatId) {
+  return {
+    chatId,
+    messageId: item.message_id,
+    senderId: historySenderId(item),
+    senderName: item?.sender?.sender_name || historySenderId(item),
+    content: parseJsonContent(item?.body?.content)?.text || item?.body?.content || "",
+    resources: [],
+    mentionedBot: true,
   };
 }
 
@@ -370,23 +427,95 @@ async function listSessionFileMessages(message, pending) {
   return files;
 }
 
+async function listSessionCompletionMessages(chatId, pending) {
+  const startTime = Math.floor(pending.startedAt / 1000);
+  const endTime = Math.floor(Date.now() / 1000);
+  const completions = [];
+  let pageToken = "";
+  try {
+    do {
+      const response = await client.im.v1.message.list({
+        params: {
+          container_id_type: "chat",
+          container_id: chatId,
+          start_time: String(startTime),
+          end_time: String(endTime),
+          page_size: 50,
+          page_token: pageToken || undefined,
+        },
+      });
+      const items = response.data?.items || [];
+      for (const item of items) {
+        if (historySenderId(item) !== pending.senderId) continue;
+        if (item.msg_type !== "text") continue;
+        const runtimeMessage = historyTextMessageToRuntimeMessage(item, chatId);
+        if (isCompletionMessage(runtimeMessage)) completions.push(runtimeMessage);
+      }
+      pageToken = response.data?.page_token || "";
+    } while (pageToken);
+  } catch (error) {
+    const data = error.response?.data;
+    if (data?.code === 230027 || String(data?.msg || error.message).includes("im:message.group_msg")) {
+      throw new Error(HISTORY_PERMISSION_ERROR);
+    }
+    throw error;
+  }
+  return completions;
+}
+
 async function handleSpreadsheetCompletion(message, pending) {
+  const completionMessageId = message.messageId || "";
+  if (completionMessageId && processedCompletionMessageIds.has(completionMessageId)) {
+    console.log(`Spreadsheet completion skipped because message=${completionMessageId} was already processed.`);
+    endSpreadsheetSession(message);
+    return;
+  }
   endSpreadsheetSession(message);
   if (pending.files.length === 0) {
     pending.files.push(...(await listSessionFileMessages(message, pending)));
   }
-  if (pending.files.length === 0) {
+  const files = pending.files.filter((fileMessage, index, list) => {
+    const messageId = fileMessage.messageId || "";
+    if (messageId && processedFileMessageIds.has(messageId)) return false;
+    return !messageId || list.findIndex((item) => item.messageId === messageId) === index;
+  });
+  if (files.length === 0) {
     await sendReply(message.chatId, NO_FILES_REPLY);
+    if (completionMessageId) {
+      processedCompletionMessageIds.add(completionMessageId);
+      await saveProcessedSpreadsheetState();
+    }
     return;
   }
   let count = 0;
-  for (const fileMessage of pending.files) {
+  for (const fileMessage of files) {
     count += await handleSpreadsheetMessage(fileMessage);
+    if (fileMessage.messageId) processedFileMessageIds.add(fileMessage.messageId);
+    await saveProcessedSpreadsheetState();
+  }
+  if (completionMessageId) {
+    processedCompletionMessageIds.add(completionMessageId);
+    await saveProcessedSpreadsheetState();
   }
   await sendReply(
     message.chatId,
-    `\u5199\u5165\u5df2\u7ecf\u5b8c\u6210\uff0c\u5171\u5904\u7406 ${pending.files.length} \u4e2a\u6587\u4ef6\uff0c\u5199\u5165 ${count} \u6761\u8bb0\u5f55\u3002`,
+    `\u5199\u5165\u5df2\u7ecf\u5b8c\u6210\uff0c\u5171\u5904\u7406 ${files.length} \u4e2a\u6587\u4ef6\uff0c\u5199\u5165 ${count} \u6761\u8bb0\u5f55\u3002`,
   );
+}
+
+async function pollSpreadsheetSessions() {
+  for (const [key, pending] of [...pendingSpreadsheetChats.entries()]) {
+    if (pending.expiresAt < Date.now()) {
+      pendingSpreadsheetChats.delete(key);
+      continue;
+    }
+    const chatId = pending.chatId || key;
+    const completions = await listSessionCompletionMessages(chatId, pending);
+    if (completions.length === 0) continue;
+    const completion = completions[completions.length - 1];
+    console.log(`Spreadsheet completion recovered by polling for chat=${key}.`);
+    await handleSpreadsheetCompletion(completion, pending);
+  }
 }
 
 channel.on("message", async (message) => {
@@ -429,6 +558,15 @@ channel.on("message", async (message) => {
     } else {
       const pending = getSpreadsheetSession(message);
       if (!pending) {
+        if (isCompletionMessage(message)) {
+          console.log(
+            `Recovering spreadsheet session from recent chat history for chat=${chatKey(message)} sender=${
+              message.senderId || ""
+            }.`,
+          );
+          await handleSpreadsheetCompletion(message, recoverSpreadsheetSession(message));
+          return;
+        }
         console.log(`Message ignored because chat=${chatKey(message)} has no active spreadsheet session.`);
         return;
       }
@@ -437,7 +575,9 @@ channel.on("message", async (message) => {
         return;
       }
       if (hasFileResource(message)) {
-        pending.files.push({ ...message, tableKey: pending.tableKey });
+        if (!message.messageId || !pending.files.some((fileMessage) => fileMessage.messageId === message.messageId)) {
+          pending.files.push({ ...message, tableKey: pending.tableKey });
+        }
         pending.expiresAt = Date.now() + ACTIVATION_TTL_MS;
         console.log(
           `Spreadsheet file queued for chat=${chatKey(message)} sender=${message.senderId || ""}; total=${
@@ -477,6 +617,9 @@ try {
       console.error("Failed to write websocket heartbeat:", error.message),
     );
   }, 15000);
+  setInterval(() => {
+    pollSpreadsheetSessions().catch((error) => console.error("Spreadsheet polling failed:", error.message));
+  }, 5000);
 } catch (error) {
   console.error("Feishu websocket failed:", error?.message || error);
   await writeWebsocketStatus({
