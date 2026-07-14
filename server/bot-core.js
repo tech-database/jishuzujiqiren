@@ -714,6 +714,17 @@ function detectDrawingStatus(fields) {
   return drawingStatuses.drawing;
 }
 
+function isTimestampToday(timestamp, now = new Date()) {
+  if (!timestamp) return false;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return false;
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
 function formatDateTime(timestamp = Date.now()) {
   const date = new Date(timestamp);
   const pad = (value) => String(value).padStart(2, "0");
@@ -904,6 +915,86 @@ export async function queryUnclaimedDrawings({ tableKey } = {}) {
     table: tableKey ? resolveTableKey(tableKey) : "all",
     items,
     count: items.length,
+  };
+}
+
+export async function queryDrawingOwnerStats({ tableKey } = {}) {
+  const token = await getTenantAccessToken();
+  const owners = new Map();
+  const now = new Date();
+  let totalRecords = 0;
+
+  for (const key of drawingTableKeys(tableKey)) {
+    const tableConfig = getBitableConfig(key);
+    const fieldTypes = await getBitableFieldMap(token, tableConfig);
+    const records = await listBitableRecords(token, tableConfig);
+    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
+    totalRecords += records.length;
+
+    for (const record of records) {
+      const fields = record.fields || {};
+      const owner = bitableValueToText(fields[drawingOwnerField]);
+      if (!owner) continue;
+      if (!owners.has(owner)) {
+        owners.set(owner, {
+          owner,
+          status: "idle",
+          drawingCount: 0,
+          todayClaimed: 0,
+          todayCompleted: 0,
+          totalOwned: 0,
+          activeItems: [],
+        });
+      }
+
+      const item = owners.get(owner);
+      const status = detectDrawingStatus(fields);
+      const materialCode = getDrawingMaterialCode(fields) || "\u672a\u586b\u6599\u53f7";
+      item.totalOwned += 1;
+
+      if (status === drawingStatuses.drawing) {
+        item.drawingCount += 1;
+        item.activeItems.push({
+          table: tableConfig.key,
+          recordId: record.record_id,
+          materialCode,
+        });
+      }
+      if (isTimestampToday(parseBitableDateValue(fields[drawingClaimTimeField]), now)) {
+        item.todayClaimed += 1;
+      }
+      if (isTimestampToday(parseBitableDateValue(fields[drawingCompleteTimeField]), now)) {
+        item.todayCompleted += 1;
+      }
+    }
+  }
+
+  const items = [...owners.values()]
+    .map((item) => ({
+      ...item,
+      status: item.drawingCount > 0 ? "drawing" : "idle",
+    }))
+    .sort(
+      (left, right) =>
+        right.drawingCount - left.drawingCount ||
+        right.todayClaimed - left.todayClaimed ||
+        right.todayCompleted - left.todayCompleted ||
+        left.owner.localeCompare(right.owner, "zh-CN"),
+    );
+
+  return {
+    table: tableKey ? resolveTableKey(tableKey) : "all",
+    checkedAt: new Date().toISOString(),
+    totalRecords,
+    summary: {
+      owners: items.length,
+      idle: items.filter((item) => item.status === "idle").length,
+      drawing: items.filter((item) => item.status === "drawing").length,
+      drawingCount: items.reduce((sum, item) => sum + item.drawingCount, 0),
+      todayClaimed: items.reduce((sum, item) => sum + item.todayClaimed, 0),
+      todayCompleted: items.reduce((sum, item) => sum + item.todayCompleted, 0),
+    },
+    items,
   };
 }
 

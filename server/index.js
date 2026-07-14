@@ -16,6 +16,7 @@ import {
   getTenantAccessToken,
   parseSpreadsheetBuffer,
   queryDrawingClaimStatus,
+  queryDrawingOwnerStats,
   queryUnclaimedDrawings,
   syncDrawingStatuses,
   writeFromText,
@@ -440,6 +441,15 @@ app.post("/api/query-drawing-claims", async (req, res) => {
 app.post("/api/query-unclaimed-drawings", async (req, res) => {
   try {
     const result = await queryUnclaimedDrawings({ tableKey: req.body?.tableKey });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/drawing-owner-stats", async (req, res) => {
+  try {
+    const result = await queryDrawingOwnerStats({ tableKey: req.query.tableKey });
     res.json({ ok: true, ...result });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });

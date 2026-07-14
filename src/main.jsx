@@ -235,6 +235,9 @@ function App() {
   const [statusState, setStatusState] = useState(null);
   const [statusResult, setStatusResult] = useState(null);
   const [backgroundSyncStatus, setBackgroundSyncStatus] = useState(null);
+  const [ownerStats, setOwnerStats] = useState(null);
+  const [ownerStatsLoading, setOwnerStatsLoading] = useState(false);
+  const [ownerStatsState, setOwnerStatsState] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [statusDateRange, setStatusDateRange] = useState(() => {
@@ -623,6 +626,24 @@ function App() {
     }
   }
 
+  async function loadDrawingOwnerStats({ silent = false } = {}) {
+    if (!silent) {
+      setOwnerStatsLoading(true);
+      setOwnerStatsState(null);
+    }
+    try {
+      const response = await fetch("/api/drawing-owner-stats");
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error);
+      setOwnerStats(data);
+      setOwnerStatsState(null);
+    } catch (error) {
+      setOwnerStatsState({ ok: false, text: error.message });
+    } finally {
+      if (!silent) setOwnerStatsLoading(false);
+    }
+  }
+
   function formatDisplayTime(value) {
     if (!value) return "-";
     const date = new Date(value);
@@ -650,6 +671,13 @@ function App() {
     const timer = window.setInterval(loadBackgroundSyncStatus, 3000);
     return () => window.clearInterval(timer);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "owners" || !configReady) return undefined;
+    loadDrawingOwnerStats();
+    const timer = window.setInterval(() => loadDrawingOwnerStats({ silent: true }), 10000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, configReady]);
 
   return (
     <main className="app-shell">
@@ -718,6 +746,13 @@ function App() {
         >
           <Activity size={18} />
           状态检测
+        </button>
+        <button
+          className={`tab-button ${activeTab === "owners" ? "active" : ""}`}
+          onClick={() => setActiveTab("owners")}
+        >
+          <UsersRound size={18} />
+          绘图人动态
         </button>
         <button
           className={`tab-button ${activeTab === "drawing" ? "active" : ""}`}
@@ -1190,6 +1225,112 @@ function App() {
               </button>
             </div>
           </div>
+        </section>
+      )}
+
+      {activeTab === "owners" && (
+        <section className="card mapping-section owner-section">
+          <div className="section-head mapping-head">
+            <div>
+              <h2>绘图人动态检测</h2>
+              <p>自动读取清单里出现过的绘图人，显示当前绘图状态、今日接图和今日完成数量。</p>
+            </div>
+            <Pill tone={configReady ? "success" : "warning"} icon={UsersRound}>
+              {configReady ? `${ownerStats?.summary?.owners || 0} 位绘图人` : "需先配置"}
+            </Pill>
+          </div>
+
+          <ProgressBar active={ownerStatsLoading} label="正在读取绘图人动态" />
+
+          {ownerStats?.summary && (
+            <div className="owner-summary-grid">
+              <div className="owner-summary-card drawing">
+                <span>绘图中人员</span>
+                <strong>{ownerStats.summary.drawing}</strong>
+              </div>
+              <div className="owner-summary-card idle">
+                <span>空闲人员</span>
+                <strong>{ownerStats.summary.idle}</strong>
+              </div>
+              <div className="owner-summary-card claimed">
+                <span>今日接图</span>
+                <strong>{ownerStats.summary.todayClaimed}</strong>
+              </div>
+              <div className="owner-summary-card done">
+                <span>今日完成</span>
+                <strong>{ownerStats.summary.todayCompleted}</strong>
+              </div>
+            </div>
+          )}
+
+          <div className="owner-toolbar">
+            <span>上次刷新：{formatDisplayTime(ownerStats?.checkedAt)}</span>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => loadDrawingOwnerStats()}
+              disabled={ownerStatsLoading || !configReady}
+            >
+              <RefreshCw size={18} />
+              刷新
+            </button>
+          </div>
+
+          {ownerStatsState && (
+            <div className={`inline-result ${ownerStatsState.ok ? "ok" : "error"}`}>
+              {ownerStatsState.text}
+            </div>
+          )}
+
+          {ownerStats?.items?.length > 0 ? (
+            <div className="owner-grid">
+              {ownerStats.items.map((item) => (
+                <article className={`owner-card ${item.status}`} key={item.owner}>
+                  <div className="owner-card-head">
+                    <div>
+                      <strong>{item.owner}</strong>
+                      <span>{item.status === "drawing" ? `绘图中 ${item.drawingCount} 张` : "空闲"}</span>
+                    </div>
+                    <Pill tone={item.status === "drawing" ? "warning" : "success"} icon={Activity}>
+                      {item.status === "drawing" ? "绘图中" : "空闲"}
+                    </Pill>
+                  </div>
+
+                  <div className="owner-metrics">
+                    <div>
+                      <span>当前</span>
+                      <strong>{item.drawingCount}</strong>
+                    </div>
+                    <div>
+                      <span>今日接图</span>
+                      <strong>{item.todayClaimed}</strong>
+                    </div>
+                    <div>
+                      <span>今日完成</span>
+                      <strong>{item.todayCompleted}</strong>
+                    </div>
+                  </div>
+
+                  {item.activeItems.length > 0 && (
+                    <div className="owner-active-list" aria-label={`${item.owner} 当前绘图`}>
+                      {item.activeItems.slice(0, 6).map((activeItem) => (
+                        <span key={`${activeItem.table}:${activeItem.recordId}`}>
+                          {activeItem.materialCode}
+                        </span>
+                      ))}
+                      {item.activeItems.length > 6 && <span>+{item.activeItems.length - 6}</span>}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="owner-empty">
+              <UsersRound size={28} />
+              <strong>还没有读取到绘图人</strong>
+              <span>清单里出现绘图人后，这里会自动形成状态看板。</span>
+            </div>
+          )}
         </section>
       )}
 
