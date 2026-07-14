@@ -858,7 +858,7 @@ function App() {
                 </div>
               )}
               <div className="action-buttons">
-                <button className="button secondary" onClick={saveConfig} disabled={saving}>
+                <button className="button secondary" onClick={() => saveConfig()} disabled={saving}>
                   <Save size={18} />
                   {saving ? "保存中" : "保存配置"}
                 </button>
@@ -995,7 +995,7 @@ function App() {
                 <Plus size={18} />
                 添加一行
               </button>
-              <button className="button primary" onClick={saveConfig} disabled={saving}>
+              <button className="button primary" onClick={() => saveConfig()} disabled={saving}>
                 <Save size={18} />
                 {saving ? "保存中" : "保存映射"}
               </button>
