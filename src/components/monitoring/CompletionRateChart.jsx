@@ -2,6 +2,9 @@ import { memo, useMemo } from "react";
 import { BaseChart } from "../charts/BaseChart";
 
 function CompletionRateChartComponent({ completionRate, loading }) {
+  const safeValue = completionRate.available && Number.isFinite(completionRate.value)
+    ? Number(completionRate.value.toFixed(1))
+    : 0;
   const option = useMemo(
     () => ({
       series: [
@@ -45,12 +48,12 @@ function CompletionRateChartComponent({ completionRate, loading }) {
             fontSize: 30,
             fontWeight: 700,
           },
-          data: [{ value: Number(completionRate.value.toFixed(1)), name: completionRate.label }],
+          data: [{ value: safeValue, name: completionRate.label }],
           animationDuration: 420,
         },
       ],
     }),
-    [completionRate],
+    [completionRate, safeValue],
   );
 
   return (

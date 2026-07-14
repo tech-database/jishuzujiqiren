@@ -72,6 +72,11 @@ function BaseChartComponent({ option, loading = false, empty = false, error = ""
 
   useEffect(() => {
     if (!chartRef.current) return undefined;
+    if (typeof ResizeObserver === "undefined") {
+      const resize = () => instanceRef.current?.resize();
+      window.addEventListener("resize", resize);
+      return () => window.removeEventListener("resize", resize);
+    }
     const resizeObserver = new ResizeObserver(() => {
       instanceRef.current?.resize();
     });
