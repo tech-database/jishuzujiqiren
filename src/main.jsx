@@ -406,11 +406,19 @@ function App() {
     ];
   }
 
-  async function saveConfig() {
+  function requestAdminPassword() {
+    const password = window.prompt("请输入管理密码");
+    if (password === null) return null;
+    return password.trim();
+  }
+
+  async function saveConfig(adminPassword = requestAdminPassword()) {
+    if (adminPassword === null) return false;
     const dataToSave = {
       ...config,
       fieldMap: buildFieldMap(fieldMappings),
       nameIdMap: buildNameIdMap(nameIdRows),
+      adminPassword,
     };
     setSaving(true);
     setSaveState(null);
@@ -436,10 +444,12 @@ function App() {
   }
 
   async function checkConnection() {
+    const adminPassword = requestAdminPassword();
+    if (adminPassword === null) return;
     setChecking(true);
     setCheckState(null);
     try {
-      const saved = await saveConfig();
+      const saved = await saveConfig(adminPassword);
       if (!saved) return;
       const response = await fetch("/api/check-connection", {
         method: "POST",

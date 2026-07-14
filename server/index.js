@@ -30,6 +30,7 @@ const port = Number(process.env.PORT || 8787);
 const envPath = path.join(rootDir, ".env");
 const statusSyncIntervalMs = Number(process.env.STATUS_SYNC_INTERVAL_MS || 10000);
 const websocketStatusPath = path.join(__dirname, ".runtime", "long-connection-status.json");
+const configWritePassword = process.env.CONFIG_WRITE_PASSWORD || "888888";
 let statusSyncRunning = false;
 let lastBackgroundFingerprint = "";
 const statusSyncInfo = {
@@ -217,6 +218,14 @@ function serializeEnv(entries) {
     .join("\n")}\n`;
 }
 
+function assertConfigWritePassword(password) {
+  if (String(password || "") !== configWritePassword) {
+    const error = new Error("管理密码错误，未保存改动");
+    error.statusCode = 401;
+    throw error;
+  }
+}
+
 async function runStatusSync(reason, range = {}, { skipIfRunning = false, suppressErrors = false } = {}) {
   if (!getConfigStatus().ready) {
     if (skipIfRunning || suppressErrors) return null;
@@ -304,11 +313,12 @@ app.get("/api/config", (_req, res) => {
 
 app.post("/api/config", async (req, res) => {
   try {
+    assertConfigWritePassword(req.body?.adminPassword);
     const entries = applyRuntimeConfig(req.body || {});
     await writeFile(envPath, serializeEnv(entries), "utf8");
     res.json({ ok: true, config: publicConfig(), status: getConfigStatus() });
   } catch (error) {
-    res.status(400).json({ ok: false, error: error.message });
+    res.status(error.statusCode || 400).json({ ok: false, error: error.message });
   }
 });
 
