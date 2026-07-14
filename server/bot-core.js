@@ -626,16 +626,17 @@ export function isDrawClaimCommand(text) {
   return String(text || "").includes("\u9886\u56fe");
 }
 
-function cleanDrawClaimText(text) {
+function cleanDrawingCommandText(text) {
   return String(text || "")
     .replace(/<at\b[^>]*>.*?<\/at>/g, " ")
     .replace(/@\S+/g, " ")
     .replace(/\u9886\u56fe/g, " ")
+    .replace(/\u7ed8\u56fe\u5b8c\u6210|\u5b8c\u6210\u56fe|\u56fe\u7eb8\u5b8c\u6210/g, " ")
     .trim();
 }
 
 export function extractMaterialCodes(text) {
-  const tokens = cleanDrawClaimText(text)
+  const tokens = cleanDrawingCommandText(text)
     .split(/[\s,\uFF0C\u3001\u3002;\uFF1B|/\\]+/)
     .map((token) =>
       token
