@@ -1365,7 +1365,7 @@ function App() {
       setOwnerStatsState(null);
     }
     try {
-      const response = await fetch(`/api/drawing-owner-stats?tableKey=${encodeURIComponent(targetTable)}`);
+      const response = await fetch("/api/drawing-owner-stats");
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
       setOwnerStats(data);
@@ -1407,7 +1407,7 @@ function App() {
     loadDrawingOwnerStats();
     const timer = window.setInterval(() => loadDrawingOwnerStats({ silent: true }), 10000);
     return () => window.clearInterval(timer);
-  }, [activeTab, configReady, targetTable]);
+  }, [activeTab, configReady]);
 
   return (
     <>
