@@ -1,10 +1,10 @@
-export function toSafeNumber(value, fallback = 0) {
+function toSafeNumber(value, fallback = 0) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return fallback;
   return number;
 }
 
-export function normalizeDrawingStatus(status) {
+function normalizeDrawingStatus(status) {
   const normalized = String(status || "").trim().toLowerCase();
   if (normalized === "drawing") {
     return { key: "drawing", label: "绘图中", tone: "warning" };
@@ -15,7 +15,7 @@ export function normalizeDrawingStatus(status) {
   return { key: "unknown", label: "未知状态", tone: "neutral" };
 }
 
-export function normalizeActiveItems(items = []) {
+function normalizeActiveItems(items = []) {
   return (Array.isArray(items) ? items : [])
     .map((item, index) => ({
       table: String(item?.table || "unknown"),

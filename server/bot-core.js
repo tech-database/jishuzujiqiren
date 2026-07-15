@@ -5,6 +5,9 @@ const requiredConfig = [
   "FEISHU_BITABLE_TABLE_ID",
 ];
 
+import { readFileSync } from "node:fs";
+import { parse as parseDotenv } from "dotenv";
+
 const tableDefinitions = {
   board: {
     label: "胶板",
@@ -25,39 +28,50 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const envFileUrl = new URL("../.env", import.meta.url);
+
+function readRuntimeEnvValue(key) {
+  try {
+    const env = parseDotenv(readFileSync(envFileUrl));
+    if (Object.prototype.hasOwnProperty.call(env, key)) return env[key];
+  } catch {
+    // Fall back to the process environment when the local .env file is unavailable.
+  }
+  return process.env[key];
+}
 
 export function getConfigStatus() {
-  const missing = requiredConfig.filter((key) => !process.env[key]);
+  const missing = requiredConfig.filter((key) => !readRuntimeEnvValue(key));
   return {
     ready: missing.length === 0,
     missing,
     webhookPath: "/webhook/feishu",
     table: {
-      appTokenSet: Boolean(process.env.FEISHU_BITABLE_APP_TOKEN),
-      tableIdSet: Boolean(process.env.FEISHU_BITABLE_TABLE_ID),
+      appTokenSet: Boolean(readRuntimeEnvValue("FEISHU_BITABLE_APP_TOKEN")),
+      tableIdSet: Boolean(readRuntimeEnvValue("FEISHU_BITABLE_TABLE_ID")),
     },
     tables: getBitableTablesStatus(),
     fieldMap: readFieldMap(),
     nameIdMap: readNameIdMap(),
-    replyEnabled: process.env.FEISHU_REPLY_ENABLED === "true",
+    replyEnabled: readRuntimeEnvValue("FEISHU_REPLY_ENABLED") === "true",
   };
 }
 
-export function resolveTableKey(tableKey) {
+function resolveTableKey(tableKey) {
   const text = String(tableKey || "").trim().toLowerCase();
   if (text === "paint" || text === "油漆") return "paint";
   return "board";
 }
 
-export function getBitableTablesStatus() {
+function getBitableTablesStatus() {
   return Object.fromEntries(
     Object.entries(tableDefinitions).map(([key, definition]) => [
       key,
       {
         label: definition.label,
-        appTokenSet: Boolean(process.env[definition.appTokenEnv]),
-        tableIdSet: Boolean(process.env[definition.tableIdEnv]),
-        ready: Boolean(process.env[definition.appTokenEnv] && process.env[definition.tableIdEnv]),
+        appTokenSet: Boolean(readRuntimeEnvValue(definition.appTokenEnv)),
+        tableIdSet: Boolean(readRuntimeEnvValue(definition.tableIdEnv)),
+        ready: Boolean(readRuntimeEnvValue(definition.appTokenEnv) && readRuntimeEnvValue(definition.tableIdEnv)),
       },
     ]),
   );
@@ -66,8 +80,8 @@ export function getBitableTablesStatus() {
 export function getBitableConfig(tableKey = "board") {
   const resolvedKey = resolveTableKey(tableKey);
   const definition = tableDefinitions[resolvedKey];
-  const appToken = process.env[definition.appTokenEnv] || "";
-  const tableId = process.env[definition.tableIdEnv] || "";
+  const appToken = readRuntimeEnvValue(definition.appTokenEnv) || "";
+  const tableId = readRuntimeEnvValue(definition.tableIdEnv) || "";
   if (!appToken || !tableId) {
     throw new Error(`${definition.label}多维表配置未填写完整`);
   }
@@ -84,23 +98,23 @@ function drawingTableKeys(tableKey) {
 }
 
 export function ensureConfig() {
-  const missing = requiredConfig.filter((key) => !process.env[key]);
+  const missing = requiredConfig.filter((key) => !readRuntimeEnvValue(key));
   if (missing.length > 0) {
     throw new Error(`Missing environment variables: ${missing.join(", ")}`);
   }
 }
 
-export function readFieldMap() {
+function readFieldMap() {
   try {
-    return JSON.parse(process.env.FIELD_MAP_JSON || "{}");
+    return JSON.parse(readRuntimeEnvValue("FIELD_MAP_JSON") || "{}");
   } catch {
     return {};
   }
 }
 
-export function readNameIdMap() {
+function readNameIdMap() {
   try {
-    const parsed = JSON.parse(process.env.NAME_ID_MAP_JSON || "{}");
+    const parsed = JSON.parse(readRuntimeEnvValue("NAME_ID_MAP_JSON") || "{}");
     if (Array.isArray(parsed)) {
       return Object.fromEntries(
         parsed
@@ -127,6 +141,12 @@ function resolveDrawingOwnerValue(senderName, senderId, ownerType) {
   if (ownerType === 11 && cleanSenderId) return [{ id: cleanSenderId }];
   if (cleanSenderId) return cleanSenderId;
   return cleanSenderName;
+}
+
+function resolveMappedOwnerName(ownerValue) {
+  const cleanOwner = String(ownerValue || "").trim();
+  if (!cleanOwner) return "";
+  return String(readNameIdMap()[cleanOwner] || "").trim();
 }
 
 function normalizeValue(value) {
@@ -285,7 +305,7 @@ function parseKeyValueRecord(source) {
   return applyFieldMap(Object.fromEntries(entries));
 }
 
-export function parseMessageToRecords(text) {
+function parseMessageToRecords(text) {
   const source = stripCommand(text);
   if (!source) throw new Error("Empty message.");
 
@@ -548,8 +568,8 @@ export async function getTenantAccessToken() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        app_id: process.env.FEISHU_APP_ID,
-        app_secret: process.env.FEISHU_APP_SECRET,
+        app_id: readRuntimeEnvValue("FEISHU_APP_ID"),
+        app_secret: readRuntimeEnvValue("FEISHU_APP_SECRET"),
       }),
     },
   );
@@ -673,6 +693,9 @@ const drawingDateField = "\u65e5\u671f";
 const drawingClaimTimeField = "\u9886\u56fe\u5177\u4f53\u65f6\u95f4";
 const drawingCompleteTimeField = "\u5b8c\u6210\u56fe\u5177\u4f53\u65f6\u95f4";
 const drawingDurationField = "\u7528\u65f6";
+const drawingOwnerAliases = {
+  "\u83ab\u957f\u5cf0": "\u83ab\u957f\u950b",
+};
 const drawingStatuses = {
   unclaimed: "\u672a\u9886\u53d6",
   drawing: "\u7ed8\u56fe\u4e2d",
@@ -866,7 +889,12 @@ export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {})
     const fieldsToUpdate = {};
     if (nextStatus !== currentStatus) fieldsToUpdate[drawingStatusField] = nextStatus;
 
-    const hasOwner = Boolean(bitableValueToText(record.fields?.[drawingOwnerField]));
+    const currentOwner = bitableValueToText(record.fields?.[drawingOwnerField]);
+    const mappedOwnerName = resolveMappedOwnerName(currentOwner);
+    const normalizedOwnerName = mappedOwnerName || drawingOwnerAliases[currentOwner];
+    if (normalizedOwnerName) fieldsToUpdate[drawingOwnerField] = normalizedOwnerName;
+
+    const hasOwner = Boolean(currentOwner);
     const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
     const completeTime = parseBitableDateValue(record.fields?.[drawingCompleteTimeField]);
     const now = Date.now();

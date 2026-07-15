@@ -16,7 +16,6 @@
     "@xyflow/react": "^12.11.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "echarts": "^6.1.0",
     "express": "^4.21.2",
     "framer-motion": "^12.42.2",
     "jszip": "^3.10.1",

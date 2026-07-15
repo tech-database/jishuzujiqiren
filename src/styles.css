@@ -3470,7 +3470,6 @@ button {
 .monitoring-chart-card,
 .monitoring-error-panel,
 .live-log-center,
-.monitoring-empty-panel,
 .monitoring-loading-shell {
   border: var(--glass-border);
   border-radius: var(--radius-card);
@@ -3493,8 +3492,7 @@ button {
 .monitoring-control-surface,
 .monitoring-chart-card,
 .monitoring-error-panel,
-.live-log-center,
-.monitoring-empty-panel {
+.live-log-center {
   padding: 18px;
 }
 
@@ -3686,11 +3684,6 @@ button {
   color: var(--color-muted);
   font-size: 13px;
   line-height: 1.45;
-}
-
-.base-chart {
-  width: 100%;
-  height: 300px;
 }
 
 .status-stack-chart,
@@ -3890,57 +3883,6 @@ button {
   from {
     width: 0;
   }
-}
-
-.chart-state {
-  display: grid;
-  min-height: 300px;
-  place-items: center;
-  gap: 8px;
-  border: 1px dashed rgba(22, 119, 255, 0.2);
-  border-radius: 16px;
-  color: var(--color-muted);
-  background: rgba(255, 255, 255, 0.42);
-  text-align: center;
-}
-
-.chart-state strong {
-  color: var(--color-ink);
-}
-
-.chart-state.error strong {
-  color: var(--color-danger);
-}
-
-.monitoring-empty-panel {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  min-height: 240px;
-  text-align: center;
-}
-
-.monitoring-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 15px;
-  color: var(--color-primary);
-  background: rgba(22, 119, 255, 0.1);
-}
-
-.monitoring-empty-panel strong {
-  margin-top: 12px;
-  color: var(--color-ink);
-  font-size: 17px;
-}
-
-.monitoring-empty-panel p {
-  max-width: 48ch;
-  margin: 8px 0 0;
-  color: var(--color-muted);
-  line-height: 1.5;
 }
 
 .monitoring-error-message {

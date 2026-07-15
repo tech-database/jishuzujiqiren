@@ -7,7 +7,7 @@ export function normalizeFieldName(value) {
   return String(value || "").trim();
 }
 
-export function makeFieldNodeId(side, name) {
+function makeFieldNodeId(side, name) {
   return `${side}:${encodeURIComponent(normalizeFieldName(name))}`;
 }
 

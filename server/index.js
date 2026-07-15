@@ -32,7 +32,7 @@ const statusSyncIntervalMs = Number(process.env.STATUS_SYNC_INTERVAL_MS || 10000
 const websocketStatusPath = path.join(__dirname, ".runtime", "long-connection-status.json");
 const configWritePassword = process.env.CONFIG_WRITE_PASSWORD || "888888";
 let statusSyncRunning = false;
-let lastBackgroundFingerprint = "";
+const lastBackgroundFingerprints = {};
 const statusSyncInfo = {
   enabled: true,
   mode: "on_change",
@@ -49,7 +49,26 @@ const statusSyncInfo = {
   skippedCount: 0,
 };
 
-app.use(cors());
+const localCorsOrigins = new Set([
+  `http://127.0.0.1:${port}`,
+  `http://localhost:${port}`,
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5174",
+  "http://localhost:5174",
+]);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || localCorsOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
+  }),
+);
 app.use(express.json({ limit: "2mb" }));
 
 function formatDateInput(date) {
@@ -271,36 +290,39 @@ async function runStatusSync(reason, range = {}, { skipIfRunning = false, suppre
 
 async function runBackgroundStatusSync(reason = "timer") {
   if (statusSyncRunning || !getConfigStatus().ready) return null;
-  const range = { ...defaultStatusDateRange(), tableKey: "board" };
-  statusSyncInfo.range = range;
-  statusSyncInfo.lastCheckedAt = new Date().toISOString();
-  statusSyncInfo.lastError = "";
-  try {
-    const fingerprint = await getDrawingStatusFingerprint(range);
-    if (!lastBackgroundFingerprint) {
-      lastBackgroundFingerprint = fingerprint;
-      statusSyncInfo.lastReason = "baseline";
-      statusSyncInfo.lastSkippedAt = new Date().toISOString();
-      statusSyncInfo.skippedCount += 1;
-      return null;
+  const results = [];
+  for (const tableKey of ["board", "paint"]) {
+    const range = { ...defaultStatusDateRange(), tableKey };
+    statusSyncInfo.range = range;
+    statusSyncInfo.lastCheckedAt = new Date().toISOString();
+    statusSyncInfo.lastError = "";
+    try {
+      const fingerprint = await getDrawingStatusFingerprint(range);
+      if (!lastBackgroundFingerprints[tableKey]) {
+        lastBackgroundFingerprints[tableKey] = fingerprint;
+        statusSyncInfo.lastReason = `baseline:${tableKey}`;
+        statusSyncInfo.lastSkippedAt = new Date().toISOString();
+        statusSyncInfo.skippedCount += 1;
+        continue;
+      }
+      if (fingerprint === lastBackgroundFingerprints[tableKey]) {
+        statusSyncInfo.lastReason = `no-change:${tableKey}`;
+        statusSyncInfo.lastSkippedAt = new Date().toISOString();
+        statusSyncInfo.skippedCount += 1;
+        continue;
+      }
+      statusSyncInfo.lastChangedAt = new Date().toISOString();
+      const result = await runStatusSync(`table-change:${tableKey}`, range, { skipIfRunning: true, suppressErrors: true });
+      if (result) {
+        lastBackgroundFingerprints[tableKey] = await getDrawingStatusFingerprint(range);
+        results.push(result);
+      }
+    } catch (error) {
+      statusSyncInfo.lastError = error.message;
+      console.error(`Drawing status change check failed (${reason}:${tableKey}):`, error.message);
     }
-    if (fingerprint === lastBackgroundFingerprint) {
-      statusSyncInfo.lastReason = "no-change";
-      statusSyncInfo.lastSkippedAt = new Date().toISOString();
-      statusSyncInfo.skippedCount += 1;
-      return null;
-    }
-    statusSyncInfo.lastChangedAt = new Date().toISOString();
-    const result = await runStatusSync("table-change", range, { skipIfRunning: true, suppressErrors: true });
-    if (result) {
-      lastBackgroundFingerprint = await getDrawingStatusFingerprint(range);
-    }
-    return result;
-  } catch (error) {
-    statusSyncInfo.lastError = error.message;
-    console.error(`Drawing status change check failed (${reason}):`, error.message);
-    return null;
   }
+  return results.length > 0 ? results : null;
 }
 
 app.get("/api/background-status-sync", (_req, res) => {
@@ -475,7 +497,11 @@ app.post("/api/sync-drawing-statuses", async (req, res) => {
     };
     const result = await runStatusSync("manual", manualRange);
     try {
-      lastBackgroundFingerprint = await getDrawingStatusFingerprint({ ...defaultStatusDateRange(), tableKey: "board" });
+      const refreshedTableKey = manualRange.tableKey || "board";
+      lastBackgroundFingerprints[refreshedTableKey] = await getDrawingStatusFingerprint({
+        ...defaultStatusDateRange(),
+        tableKey: refreshedTableKey,
+      });
     } catch {
       // A failed fingerprint refresh should not turn a completed manual sync into a failed request.
     }
@@ -494,7 +520,7 @@ app.post("/webhook/feishu", async (req, res) => {
 
   const expectedToken = process.env.FEISHU_VERIFICATION_TOKEN;
   const incomingToken = body.token || body.header?.token;
-  if (expectedToken && incomingToken && expectedToken !== incomingToken) {
+  if (expectedToken && expectedToken !== incomingToken) {
     return res.status(401).json({ ok: false, error: "invalid verification token" });
   }
 

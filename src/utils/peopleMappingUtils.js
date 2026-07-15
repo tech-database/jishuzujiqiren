@@ -1,4 +1,4 @@
-export function normalizePeopleRows(rows = []) {
+function normalizePeopleRows(rows = []) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   return sourceRows.map((row, index) => {
     const id = String(row?.id || "").trim();

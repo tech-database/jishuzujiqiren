@@ -2,12 +2,12 @@ export const IMPORT_FILE_EXTENSIONS = [".xlsx", ".xls", ".csv"];
 export const IMPORT_FILE_ACCEPT = IMPORT_FILE_EXTENSIONS.join(",");
 export const IMPORT_FILE_MAX_BYTES = 50 * 1024 * 1024;
 
-export function getFileExtension(fileName = "") {
+function getFileExtension(fileName = "") {
   const match = String(fileName).toLowerCase().match(/\.[^.]+$/);
   return match ? match[0] : "";
 }
 
-export function isSupportedImportFile(file) {
+function isSupportedImportFile(file) {
   return IMPORT_FILE_EXTENSIONS.includes(getFileExtension(file?.name));
 }
 
@@ -21,7 +21,7 @@ export function formatFileSize(size = 0) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function formatFileModifiedTime(value) {
+function formatFileModifiedTime(value) {
   if (!value) return "未知";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "未知";

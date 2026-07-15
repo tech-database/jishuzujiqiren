@@ -1251,6 +1251,7 @@ function App() {
           materialCodes,
           senderName: claimForm.senderName.trim(),
           ...statusDateRange,
+          tableKey: targetTable,
         }),
       });
       const data = await response.json();
@@ -1280,7 +1281,7 @@ function App() {
       const response = await fetch("/api/complete-drawing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ materialCodes, ...statusDateRange }),
+        body: JSON.stringify({ materialCodes, ...statusDateRange, tableKey: targetTable }),
       });
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
@@ -1305,7 +1306,7 @@ function App() {
       const response = await fetch("/api/query-unclaimed-drawings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ tableKey: targetTable }),
       });
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
@@ -1364,7 +1365,7 @@ function App() {
       setOwnerStatsState(null);
     }
     try {
-      const response = await fetch("/api/drawing-owner-stats");
+      const response = await fetch(`/api/drawing-owner-stats?tableKey=${encodeURIComponent(targetTable)}`);
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
       setOwnerStats(data);
@@ -1406,7 +1407,7 @@ function App() {
     loadDrawingOwnerStats();
     const timer = window.setInterval(() => loadDrawingOwnerStats({ silent: true }), 10000);
     return () => window.clearInterval(timer);
-  }, [activeTab, configReady]);
+  }, [activeTab, configReady, targetTable]);
 
   return (
     <>

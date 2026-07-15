@@ -163,7 +163,3 @@ export function normalizeLogEntries({ backgroundSyncStatus, statusResult, status
 
   return logs.slice(0, 40);
 }
-
-export function hasTrendData() {
-  return false;
-}

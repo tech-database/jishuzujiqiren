@@ -1,4 +1,4 @@
-export function splitMaterialCodeTokens(value = "") {
+function splitMaterialCodeTokens(value = "") {
   return String(value || "")
     .split(/[\s,，、。;；|/\\]+/)
     .map((item) => item.trim())

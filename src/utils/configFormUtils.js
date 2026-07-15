@@ -4,7 +4,7 @@ export function isSensitiveConfigKey(key) {
   return SENSITIVE_KEYS.has(key);
 }
 
-export function normalizeConfigSnapshot(config = {}) {
+function normalizeConfigSnapshot(config = {}) {
   return {
     appId: String(config.appId || ""),
     appSecret: String(config.appSecret || ""),
