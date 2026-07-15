@@ -54,7 +54,7 @@ export default function DrawingOperationsCenter({
     <PageTransition className="drawing-center">
       <PageHeader
         icon={<Gauge size={24} />}
-        title="Drawing Operations Center"
+        title="绘图人动态中心"
         description="基于真实飞书表格记录监控绘图人员、当前料号、今日接图与完成数量。"
         actions={(
           <>

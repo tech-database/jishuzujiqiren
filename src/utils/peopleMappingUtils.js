@@ -1,5 +1,6 @@
 export function normalizePeopleRows(rows = []) {
-  return rows.map((row, index) => {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  return sourceRows.map((row, index) => {
     const id = String(row?.id || "").trim();
     const name = String(row?.name || "").trim();
     return {
@@ -31,29 +32,33 @@ export function getPeopleStats(rows = []) {
 }
 
 export function createPersonDraft(row = {}) {
+  const source = row || {};
   return {
-    name: String(row.name || "").trim(),
-    id: String(row.id || "").trim(),
+    name: String(source.name || "").trim(),
+    id: String(source.id || "").trim(),
   };
 }
 
 export function validatePersonDraft(draft) {
+  const source = createPersonDraft(draft);
   const errors = {};
-  if (!draft.name.trim()) errors.name = "请输入人员姓名";
-  if (!draft.id.trim()) errors.id = "请输入飞书用户 ID";
+  if (!source.name) errors.name = "请输入人员姓名";
+  if (!source.id) errors.id = "请输入飞书用户 ID";
   return errors;
 }
 
 export function upsertPeopleRow(rows = [], draft, editIndex = null) {
+  const sourceRows = Array.isArray(rows) ? rows : [];
   const nextRow = createPersonDraft(draft);
   if (typeof editIndex === "number" && editIndex >= 0) {
-    return rows.map((row, index) => (index === editIndex ? nextRow : row));
+    return sourceRows.map((row, index) => (index === editIndex ? nextRow : row));
   }
-  return [...rows.filter((row) => row.id || row.name), nextRow];
+  return [...sourceRows.filter((row) => row.id || row.name), nextRow];
 }
 
 export function deletePeopleRow(rows = [], deleteIndex) {
-  const next = rows.filter((_, index) => index !== deleteIndex);
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const next = sourceRows.filter((_, index) => index !== deleteIndex);
   return next.length > 0 ? next : [{ id: "", name: "" }];
 }
 
@@ -67,12 +72,13 @@ export function arePeopleRowsEqual(left = [], right = []) {
 }
 
 export function getPagedRows(rows = [], page = 1, pageSize = 12) {
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const totalPages = Math.max(1, Math.ceil(sourceRows.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const start = (safePage - 1) * pageSize;
   return {
     page: safePage,
     totalPages,
-    rows: rows.slice(start, start + pageSize),
+    rows: sourceRows.slice(start, start + pageSize),
   };
 }

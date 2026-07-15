@@ -5,7 +5,6 @@ import { GlassButton, GlassCard, StatusBadge } from "../design-system";
 import { StatusPulse } from "../motion";
 import { CompletionRateChart } from "./CompletionRateChart";
 import { LiveLogPanel } from "./LiveLogPanel";
-import { MonitoringEmptyPanel } from "./MonitoringEmptyPanel";
 import { MonitoringMetricCard } from "./MonitoringMetricCard";
 import { TaskStatusChart } from "./TaskStatusChart";
 import {
@@ -179,7 +178,6 @@ export default function MonitoringCenter({
       </section>
 
       <section className="monitoring-insight-grid">
-        <MonitoringEmptyPanel title="暂无趋势数据" message="当前接口暂未提供历史时间序列或任务时间字段，因此不创建任务趋势图。" />
         <GlassCard className="monitoring-error-panel">
           <div className="monitoring-panel-head">
             <div>

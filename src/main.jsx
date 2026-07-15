@@ -90,16 +90,43 @@ function buildFieldMap(fieldMappings) {
   return result;
 }
 
+function normalizeNameIdMap(source) {
+  let value = source;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return Object.fromEntries(
+      value
+        .map((item) => [String(item?.id || item?.userId || "").trim(), String(item?.name || "").trim()])
+        .filter(([id, name]) => id && name),
+    );
+  }
+
+  if (!value || typeof value !== "object") return {};
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([id, name]) => [String(id || "").trim(), String(name || "").trim()])
+      .filter(([id, name]) => id && name),
+  );
+}
+
 function mapToNameIdRows(nameIdMap) {
-  const rows = Object.entries(nameIdMap || {}).map(([id, name]) => ({ id, name }));
+  const rows = Object.entries(normalizeNameIdMap(nameIdMap)).map(([id, name]) => ({ id, name }));
   return rows.length > 0 ? rows : [{ id: "", name: "" }];
 }
 
 function buildNameIdMap(rows) {
   const result = {};
-  for (const row of rows) {
-    const id = row.id.trim();
-    const name = row.name.trim();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = String(row?.id || "").trim();
+    const name = String(row?.name || "").trim();
     if (id && name) result[id] = name;
   }
   return result;
@@ -297,7 +324,7 @@ function ConnectionCenter({
             <Link2 size={24} />
           </span>
           <div>
-            <h2>Robot Connection Center</h2>
+            <h2>机器人连接中心</h2>
             <p>管理机器人与飞书、多维表格和 Excel 数据流的连接状态。</p>
           </div>
         </div>
@@ -311,7 +338,7 @@ function ConnectionCenter({
         </div>
       </div>
 
-      <section className="connection-dashboard" aria-label="连接健康 Dashboard">
+      <section className="connection-dashboard" aria-label="连接健康概览">
         <ConnectionMetricCard
           icon={MessageSquareText}
           title="飞书连接"
@@ -322,7 +349,7 @@ function ConnectionCenter({
         />
         <ConnectionMetricCard
           icon={FileSpreadsheet}
-          title="Excel 数据源"
+          title="表格数据源"
           status={configReady ? "已配置" : "等待配置"}
           tone={configReady ? "success" : "neutral"}
           detail={bitableFields.length > 0 ? `已读取 ${bitableFields.length} 个字段` : "等待连接后读取字段"}
@@ -342,7 +369,7 @@ function ConnectionCenter({
         <section className="card connection-health-panel" aria-label="飞书连接健康检查">
           <div className="section-head">
             <div>
-              <h2>Live Health Signals</h2>
+              <h2>实时健康信号</h2>
               <p>飞书开放平台、数据权限与网络连通性的实时检查结果。</p>
             </div>
             <Pill tone={healthStatus.ok ? "success" : "warning"} icon={Server}>
@@ -441,7 +468,7 @@ function ConnectionCenter({
               <ShieldCheck size={24} />
             </span>
             <div>
-              <h2>Connection Operations</h2>
+              <h2>连接操作</h2>
               <p>选择目标表后保存配置或执行连接测试，测试成功后会读取字段用于映射。</p>
             </div>
           </div>
@@ -494,14 +521,14 @@ function ConnectionCenter({
 
 function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult, ownerStats }) {
   const taskLabels = {
-    connection: "Connection Center",
-    mapping: "AI Field Mapping",
-    commands: "Command Center",
-    people: "Identity Mapping",
-    status: "Robot Monitoring",
-    owners: "Drawing Operations",
-    upload: "Data Import",
-    drawing: "Drawing Assignment",
+    connection: "连接配置",
+    mapping: "字段映射",
+    commands: "飞书口令",
+    people: "人员映射",
+    status: "状态检测",
+    owners: "绘图人动态",
+    upload: "数据导入",
+    drawing: "领图登记",
   };
   const completed = statusResult?.summary?.done ?? ownerStats?.summary?.todayCompleted ?? null;
   const total = statusResult?.summary?.total ?? null;
@@ -512,11 +539,11 @@ function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult,
   const statusLabel = healthStatus?.ok ? "检测通过" : configReady ? "等待检测" : "未知状态";
 
   return (
-    <aside className="robot-status-widget" aria-label="Robot status">
+    <aside className="robot-status-widget" aria-label="机器人状态">
       <StatusPulse
         tone={healthStatus?.ok ? "online" : configReady ? "running" : "standby"}
         label={statusLabel}
-        detail={taskLabels[activeTab] || "Control Center"}
+        detail={taskLabels[activeTab] || "控制中心"}
       />
       <div className="robot-status-metrics">
         <span>
@@ -639,7 +666,7 @@ function StatusMonitoringCenter({
             <Activity size={24} />
           </span>
           <div>
-            <h2>Robot Monitoring Center</h2>
+            <h2>机器人状态检测中心</h2>
             <p>实时检测绘图状态、同步飞书数据，并监控自动化链路健康度。</p>
           </div>
         </div>
@@ -661,7 +688,7 @@ function StatusMonitoringCenter({
         <HoverCard className="monitor-panel progress-panel" as="section">
           <div className="section-head">
             <div>
-              <h2>Task Completion</h2>
+              <h2>任务完成情况</h2>
               <p>根据当前检测结果计算完成率，并随数据同步实时更新。</p>
             </div>
             <Pill tone={configReady ? "neutral" : "warning"} icon={ShieldCheck}>
@@ -694,7 +721,7 @@ function StatusMonitoringCenter({
         <HoverCard className="monitor-panel health-panel" as="section">
           <div className="section-head">
             <div>
-              <h2>System Health</h2>
+              <h2>系统健康状态</h2>
               <p>异常监控、后台同步和飞书数据读写状态。</p>
             </div>
             <StatusPulse
@@ -768,7 +795,7 @@ function StatusMonitoringCenter({
         <HoverCard className="monitor-panel live-log-panel" as="section">
           <div className="section-head">
             <div>
-              <h2>Live Operation Log</h2>
+              <h2>实时操作日志</h2>
               <p>机器人检测、同步与异常事件会在这里形成实时日志流。</p>
             </div>
           </div>
@@ -778,7 +805,7 @@ function StatusMonitoringCenter({
         <HoverCard className="monitor-panel anomaly-panel" as="section">
           <div className="section-head">
             <div>
-              <h2>Anomaly Watch</h2>
+              <h2>异常关注</h2>
               <p>聚合未领取、绘图中、已完成和异常状态，辅助判断生产阻塞。</p>
             </div>
           </div>

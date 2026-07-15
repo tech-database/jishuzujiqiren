@@ -10,7 +10,7 @@ const metrics = [
   { key: "todayCompleted", label: "今日完成", icon: CheckCircle2 },
 ];
 
-export default function DrawingSummary({ summary, formatTime }) {
+export default function DrawingSummary({ summary }) {
   return (
     <section className="drawing-summary-grid" aria-label="绘图运行总览">
       {metrics.map(({ key, label, icon: Icon }) => (
@@ -22,14 +22,6 @@ export default function DrawingSummary({ summary, formatTime }) {
           <strong>{typeof summary[key] === "number" ? summary[key] : "暂无数据"}</strong>
         </GlassCard>
       ))}
-      <GlassCard className="drawing-summary-card wide" as="article">
-        <span>
-          <Clock3 size={18} />
-          最近刷新
-        </span>
-        <strong>{formatTime(summary.checkedAt)}</strong>
-        <small>保留现有 10 秒轮询，不新增第二套实时机制</small>
-      </GlassCard>
     </section>
   );
 }

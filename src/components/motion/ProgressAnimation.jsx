@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 
-export function ProgressAnimation({ value = 0, label = "Progress", className = "" }) {
+export function ProgressAnimation({ value = 0, label = "进度", className = "" }) {
   const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
   const radius = 42;
   const circumference = 2 * Math.PI * radius;

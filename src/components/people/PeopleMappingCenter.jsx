@@ -78,7 +78,7 @@ export default function PeopleMappingCenter({
     <PageTransition className="people-center">
       <PageHeader
         icon={<UserRoundCheck size={24} />}
-        title="Employee Identity Mapping Center"
+        title="人员身份映射中心"
         description="管理飞书用户 ID 与人员姓名的映射关系，用于领图登记时识别真实绘图人员。"
         actions={(
           <>

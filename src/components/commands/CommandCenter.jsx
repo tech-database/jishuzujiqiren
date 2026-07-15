@@ -41,7 +41,7 @@ export default function CommandCenter({ commands = [] }) {
     <PageTransition className="command-center">
       <PageHeader
         icon={<Bot size={24} />}
-        title="Robot Command Center"
+        title="机器人口令中心"
         description="飞书机器人口令清单与触发说明。当前项目未提供口令管理接口，因此本页仅展示真实可用口令。"
         actions={(
           <>

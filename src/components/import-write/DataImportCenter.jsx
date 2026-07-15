@@ -33,7 +33,7 @@ export default function DataImportCenter({
     <PageTransition className="import-center">
       <PageHeader
         icon={<FileSpreadsheet size={24} />}
-        title="Data Import & Write Center"
+        title="数据导入与写入中心"
         description="选择 Excel 或 CSV 文件，提交到现有服务端解析与写入流程，并查看本次会话的真实处理结果。"
         actions={(
           <>

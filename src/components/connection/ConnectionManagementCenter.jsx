@@ -52,7 +52,7 @@ export default function ConnectionManagementCenter({
       {
         title: "飞书应用连接",
         icon: MessageSquareText,
-        status: healthLoading && !healthStatus ? "检测中" : healthStatus?.ok ? "已检测" : "等待检测",
+        status: healthLoading && !healthStatus ? "检测中" : healthStatus?.checks?.feishu ? "已检测" : "等待检测",
         tone: healthStatus?.ok ? "success" : healthStatus?.checks?.feishu?.ok === false ? "danger" : "neutral",
         detail: healthStatus?.checks?.feishu?.message || healthStatus?.label || "当前接口尚未提供检测结果。",
         meta: healthStatus?.checkedAt ? `最近检测 ${formatDisplayTime(healthStatus.checkedAt)}` : "暂无检测时间",

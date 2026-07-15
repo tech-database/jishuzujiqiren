@@ -75,7 +75,7 @@ export default function DrawingAssignmentCenter({
     <PageTransition className="assignment-center">
       <PageHeader
         icon={<ClipboardCheck size={24} />}
-        title="Drawing Assignment Center"
+        title="领图登记中心"
         description="输入一个或多个料号，选择领取人，并通过现有接口提交领图登记或同步绘图完成状态。"
         actions={(
           <>

@@ -100,7 +100,20 @@ export function readFieldMap() {
 
 export function readNameIdMap() {
   try {
-    return JSON.parse(process.env.NAME_ID_MAP_JSON || "{}");
+    const parsed = JSON.parse(process.env.NAME_ID_MAP_JSON || "{}");
+    if (Array.isArray(parsed)) {
+      return Object.fromEntries(
+        parsed
+          .map((item) => [String(item?.id || item?.userId || "").trim(), String(item?.name || "").trim()])
+          .filter(([id, name]) => id && name),
+      );
+    }
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([id, name]) => [String(id || "").trim(), String(name || "").trim()])
+        .filter(([id, name]) => id && name),
+    );
   } catch {
     return {};
   }
