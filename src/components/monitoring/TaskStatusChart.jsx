@@ -1,5 +1,4 @@
-import { memo, useMemo } from "react";
-import { BaseChart } from "../charts/BaseChart";
+import { memo } from "react";
 
 const statusColors = {
   unclaimed: "#F59E0B",
@@ -9,45 +8,58 @@ const statusColors = {
 };
 
 function TaskStatusChartComponent({ distribution, loading }) {
-  const option = useMemo(
-    () => ({
-      color: distribution.entries.map((item) => statusColors[item.key] || "#1677FF"),
-      legend: {
-        bottom: 0,
-        icon: "circle",
-        textStyle: { color: "#64748B", fontSize: 12 },
-      },
-      series: [
-        {
-          name: "任务状态",
-          type: "pie",
-          radius: ["54%", "76%"],
-          center: ["50%", "45%"],
-          avoidLabelOverlap: true,
-          label: {
-            formatter: "{b}: {c}",
-            color: "#172033",
-            fontWeight: 700,
-          },
-          labelLine: {
-            lineStyle: { color: "rgba(100,116,139,.4)" },
-          },
-          data: distribution.entries.map((item) => ({ name: item.name, value: item.value })),
-          animationDuration: 420,
-        },
-      ],
-    }),
-    [distribution.entries],
-  );
+  if (loading) {
+    return (
+      <div className="compact-chart-state" aria-label="任务状态分布加载中">
+        <span />
+        <strong>正在加载状态数据</strong>
+      </div>
+    );
+  }
+
+  if (!distribution.available) {
+    return (
+      <div className="compact-chart-state" aria-label="暂无任务状态分布数据">
+        <strong>暂无任务状态分布数据</strong>
+      </div>
+    );
+  }
+
+  const total = distribution.entries.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <BaseChart
-      option={option}
-      loading={loading}
-      empty={!loading && !distribution.available}
-      emptyText="暂无任务状态分布数据"
-      ariaLabel="任务状态分布图"
-    />
+    <div className="status-stack-chart" aria-label="任务状态分布">
+      <div className="status-stack-total">
+        <span>当前检测任务</span>
+        <strong>{total}</strong>
+      </div>
+      <div className="status-stack-bar" aria-hidden="true">
+        {distribution.entries.map((item) => (
+          <span
+            key={item.key}
+            style={{
+              "--segment-color": statusColors[item.key] || "#1677FF",
+              "--segment-width": `${Math.max((item.value / total) * 100, 3)}%`,
+            }}
+          />
+        ))}
+      </div>
+      <div className="status-stack-list">
+        {distribution.entries.map((item) => {
+          const percent = total > 0 ? (item.value / total) * 100 : 0;
+          return (
+            <div className="status-stack-item" key={item.key}>
+              <span style={{ "--dot-color": statusColors[item.key] || "#1677FF" }} />
+              <div>
+                <strong>{item.name}</strong>
+                <small>{percent.toFixed(1)}%</small>
+              </div>
+              <b>{item.value}</b>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
