@@ -35,6 +35,7 @@ const ACTIVATION_TTL_MS = 10 * 60 * 1000;
 const pendingSpreadsheetChats = new Map();
 const processedCompletionMessageIds = new Set();
 const processedFileMessageIds = new Set();
+const processingCompletionKeys = new Set();
 
 async function loadProcessedSpreadsheetState() {
   try {
@@ -552,7 +553,7 @@ async function listSessionCompletionMessages(chatId, pending) {
   return completions;
 }
 
-async function handleSpreadsheetCompletion(message, pending) {
+async function processSpreadsheetCompletion(message, pending) {
   const completionMessageId = message.messageId || "";
   if (completionMessageId && processedCompletionMessageIds.has(completionMessageId)) {
     console.log(`Spreadsheet completion skipped because message=${completionMessageId} was already processed.`);
@@ -590,6 +591,34 @@ async function handleSpreadsheetCompletion(message, pending) {
     message.chatId,
     `\u5199\u5165\u5df2\u7ecf\u5b8c\u6210\uff0c\u5171\u5904\u7406 ${files.length} \u4e2a\u6587\u4ef6\uff0c\u5199\u5165 ${count} \u6761\u8bb0\u5f55\u3002`,
   );
+}
+
+async function handleSpreadsheetCompletion(message, pending) {
+  const completionMessageId = message.messageId || "";
+  const messageProcessingKey = completionMessageId ? `message:${completionMessageId}` : "";
+  const chatProcessingKey = `chat:${chatKey(message)}`;
+
+  if (
+    processingCompletionKeys.has(chatProcessingKey) ||
+    (messageProcessingKey && processingCompletionKeys.has(messageProcessingKey))
+  ) {
+    console.log(
+      `Spreadsheet completion skipped because processing is already in progress for message=${
+        completionMessageId || "unknown"
+      } chat=${chatKey(message)}.`,
+    );
+    return;
+  }
+
+  processingCompletionKeys.add(chatProcessingKey);
+  if (messageProcessingKey) processingCompletionKeys.add(messageProcessingKey);
+
+  try {
+    await processSpreadsheetCompletion(message, pending);
+  } finally {
+    processingCompletionKeys.delete(chatProcessingKey);
+    if (messageProcessingKey) processingCompletionKeys.delete(messageProcessingKey);
+  }
 }
 
 async function pollSpreadsheetSessions() {
