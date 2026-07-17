@@ -134,8 +134,25 @@ function optionalCommandTableKey(content) {
   return undefined;
 }
 
+function createCommandTableKey(content) {
+  const text = String(content || "");
+  if (!text.includes("新增")) return undefined;
+  const hasBoard = text.includes("胶板");
+  const hasPaint = text.includes("油漆");
+  if (hasBoard === hasPaint) return undefined;
+  return hasPaint ? "paint" : "board";
+}
+
+function requireCreateCommandTableKey(content) {
+  const tableKey = createCommandTableKey(content);
+  if (!tableKey) {
+    throw new Error("新增口令必须且只能指定一个目标表，请发送“胶板新增”或“油漆新增”。");
+  }
+  return tableKey;
+}
+
 function isTableCreateCommand(content) {
-  return /(?:胶板|油漆)\s*新增/.test(String(content || ""));
+  return Boolean(createCommandTableKey(content));
 }
 
 function commandHelpText() {
@@ -293,6 +310,11 @@ function isActivationMessage(message) {
   return isMentionedMessage(message) && !hasFileResource(message) && isTableCreateCommand(content);
 }
 
+function isCreateCommandAttempt(message) {
+  const content = String(message.content || "").trim();
+  return isMentionedMessage(message) && !hasFileResource(message) && content.includes("新增");
+}
+
 function isCompletionMessage(message) {
   const content = String(message.content || "").trim();
   return isMentionedMessage(message) && !hasFileResource(message) && content.includes("\u5b8c\u6210");
@@ -328,14 +350,14 @@ function isStatusSyncCommand(message) {
   return isMentionedMessage(message) && /状态检测|检测状态|同步状态/.test(content);
 }
 
-function activateSpreadsheetSession(message) {
+function activateSpreadsheetSession(message, tableKey = requireCreateCommandTableKey(message.content)) {
   const now = Date.now();
   pendingSpreadsheetChats.set(chatKey(message), {
     chatId: message.chatId,
     startedAt: now,
     expiresAt: now + ACTIVATION_TTL_MS,
     senderId: message.senderId,
-    tableKey: commandTableKey(message.content),
+    tableKey,
     files: [],
   });
 }
@@ -361,19 +383,6 @@ function getSpreadsheetSession(message) {
 
 function endSpreadsheetSession(message) {
   pendingSpreadsheetChats.delete(chatKey(message));
-}
-
-function recoverSpreadsheetSession(message) {
-  const now = Date.now();
-  return {
-    chatId: message.chatId,
-    startedAt: now - ACTIVATION_TTL_MS,
-    expiresAt: now + ACTIVATION_TTL_MS,
-    senderId: message.senderId,
-    tableKey: commandTableKey(message.content),
-    files: [],
-    recovered: true,
-  };
 }
 
 function parseJsonContent(content) {
@@ -415,6 +424,59 @@ function historyTextMessageToRuntimeMessage(item, chatId) {
     content: parseJsonContent(item?.body?.content)?.text || item?.body?.content || "",
     resources: [],
     mentionedBot: true,
+  };
+}
+
+function historyCreateTimeMs(item) {
+  const value = Number(item?.create_time || item?.createTime || 0);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return value > 1_000_000_000_000 ? value : value * 1000;
+}
+
+async function recoverSpreadsheetSession(message) {
+  const now = Date.now();
+  const startTime = Math.floor((now - ACTIVATION_TTL_MS) / 1000);
+  const endTime = Math.floor(now / 1000);
+  let pageToken = "";
+  let latestActivation = null;
+
+  do {
+    const response = await client.im.v1.message.list({
+      params: {
+        container_id_type: "chat",
+        container_id: message.chatId,
+        start_time: String(startTime),
+        end_time: String(endTime),
+        page_size: 50,
+        page_token: pageToken || undefined,
+      },
+    });
+    for (const item of response.data?.items || []) {
+      if (historySenderId(item) !== message.senderId || item.msg_type !== "text") continue;
+      const runtimeMessage = historyTextMessageToRuntimeMessage(item, message.chatId);
+      if (!isActivationMessage(runtimeMessage)) continue;
+      const createdAt = historyCreateTimeMs(item);
+      if (!latestActivation || createdAt >= latestActivation.createdAt) {
+        latestActivation = { message: runtimeMessage, createdAt };
+      }
+    }
+    pageToken = response.data?.page_token || "";
+  } while (pageToken);
+
+  if (!latestActivation) {
+    throw new Error("未找到本次新增对应的胶板新增或油漆新增口令，请重新发送新增口令后再上传文件。");
+  }
+
+  const tableKey = requireCreateCommandTableKey(latestActivation.message.content);
+  console.log(`Spreadsheet session recovered from activation history: chat=${chatKey(message)} table=${tableKey}.`);
+  return {
+    chatId: message.chatId,
+    startedAt: latestActivation.createdAt || now - ACTIVATION_TTL_MS,
+    expiresAt: now + ACTIVATION_TTL_MS,
+    senderId: message.senderId,
+    tableKey,
+    files: [],
+    recovered: true,
   };
 }
 
@@ -561,9 +623,12 @@ channel.on("message", async (message) => {
       await handleGetId(message);
       return;
     }
-    if (isActivationMessage(message)) {
-      activateSpreadsheetSession(message);
-      console.log(`Spreadsheet session started for chat=${chatKey(message)} sender=${message.senderId || ""}`);
+    if (isCreateCommandAttempt(message)) {
+      const tableKey = requireCreateCommandTableKey(message.content);
+      activateSpreadsheetSession(message, tableKey);
+      console.log(
+        `Spreadsheet session started for chat=${chatKey(message)} sender=${message.senderId || ""} table=${tableKey}`,
+      );
       await sendReply(message.chatId, ACTIVATION_REPLY);
       return;
     }
@@ -591,7 +656,7 @@ channel.on("message", async (message) => {
               message.senderId || ""
             }.`,
           );
-          await handleSpreadsheetCompletion(message, recoverSpreadsheetSession(message));
+          await handleSpreadsheetCompletion(message, await recoverSpreadsheetSession(message));
           return;
         }
         console.log(`Message ignored because chat=${chatKey(message)} has no active spreadsheet session.`);
