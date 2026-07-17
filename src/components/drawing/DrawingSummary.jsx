@@ -1,5 +1,4 @@
 import { Activity, CheckCircle2, Clock3, Database, UsersRound } from "lucide-react";
-import { GlassCard } from "../design-system";
 
 const metrics = [
   { key: "owners", label: "绘图人员", icon: UsersRound },
@@ -14,13 +13,10 @@ export default function DrawingSummary({ summary }) {
   return (
     <section className="drawing-summary-grid" aria-label="绘图运行总览">
       {metrics.map(({ key, label, icon: Icon }) => (
-        <GlassCard className="drawing-summary-card" as="article" key={key}>
-          <span>
-            <Icon size={18} />
-            {label}
-          </span>
-          <strong>{typeof summary[key] === "number" ? summary[key] : "暂无数据"}</strong>
-        </GlassCard>
+        <article className={`drawing-summary-card metric-${key}`} key={key}>
+          <span><Icon size={17} />{label}</span>
+          <strong>{typeof summary[key] === "number" ? summary[key] : "—"}</strong>
+        </article>
       ))}
     </section>
   );

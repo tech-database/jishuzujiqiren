@@ -22,20 +22,25 @@ function CompletionRateChartComponent({ completionRate, loading }) {
     );
   }
 
+  const [done, total] = String(completionRate.label).split("/");
+
   return (
     <div className="completion-kpi-chart" aria-label="任务完成率">
-      <div className="completion-kpi-value">
-        <span>当前完成率</span>
-        <strong>{safeValue}%</strong>
-        <small>{completionRate.label}</small>
+      <div
+        className="completion-ring"
+        style={{ "--completion-angle": `${safeValue * 3.6}deg` }}
+        aria-hidden="true"
+      >
+        <div>
+          <strong>{safeValue}%</strong>
+          <span>完成率</span>
+        </div>
       </div>
-      <div className="completion-kpi-track" aria-hidden="true">
-        <span style={{ "--completion-width": `${safeValue}%` }} />
-      </div>
-      <div className="completion-kpi-scale">
-        <span>0%</span>
-        <span>50%</span>
-        <span>100%</span>
+      <div className="completion-kpi-summary">
+        <span>当前检测结果</span>
+        <strong>{done} <small>/ {total}</small></strong>
+        <p>已完成任务 / 检测任务总数</p>
+        <small>当前接口未提供历史趋势对比</small>
       </div>
     </div>
   );

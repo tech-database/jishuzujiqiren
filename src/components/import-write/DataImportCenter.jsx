@@ -1,6 +1,5 @@
 import { AnimatePresence } from "framer-motion";
-import { Database, FileSpreadsheet, ShieldCheck } from "lucide-react";
-import { PageHeader, StatusBadge } from "../design-system";
+import { HardDriveUpload } from "lucide-react";
 import { PageTransition } from "../motion";
 import { IMPORT_FILE_EXTENSIONS, IMPORT_FILE_MAX_BYTES, formatFileSize } from "../../utils/importFileUtils";
 import FileDropZone from "./FileDropZone";
@@ -16,7 +15,6 @@ export default function DataImportCenter({
   uploading,
   uploadState,
   targetTable,
-  setTargetTable,
   tableSelector,
   configReady,
   fileInputRef,
@@ -31,46 +29,12 @@ export default function DataImportCenter({
 
   return (
     <PageTransition className="import-center">
-      <PageHeader
-        icon={<FileSpreadsheet size={24} />}
-        title="数据导入与写入中心"
-        description="选择 Excel 或 CSV 文件，提交到现有服务端解析与写入流程，并查看本次会话的真实处理结果。"
-        actions={(
-          <>
-            <StatusBadge tone={configReady ? "success" : "warning"}>
-              {configReady ? "配置已就绪" : "等待配置"}
-            </StatusBadge>
-            <StatusBadge tone="neutral">
-              {IMPORT_FILE_EXTENSIONS.join(" / ")}
-            </StatusBadge>
-          </>
-        )}
-      />
-
-      <section className="import-hero-panel">
-        <div>
-          <h2>数据导入与写入中心</h2>
-          <p>
-            当前接口一次性完成上传、解析、字段映射和写入；页面不模拟阶段进度，只展示真实可确认的处理状态。
-          </p>
-        </div>
-        <div className="import-hero-meta">
-          <span>
-            <ShieldCheck size={17} />
-            最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)}
-          </span>
-          <span>
-            <Database size={17} />
-            目标表 {targetTable === "paint" ? "油漆" : "胶板"}
-          </span>
-        </div>
-      </section>
-
       <section className="import-layout">
         <div className="import-main-column">
           <div className="import-target-row">
-            <span>写入目标</span>
+            <span><HardDriveUpload size={17} />写入目标</span>
             {tableSelector}
+            <small>支持 {IMPORT_FILE_EXTENSIONS.join(" / ")} · 最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)}</small>
           </div>
 
           <FileDropZone
@@ -99,8 +63,11 @@ export default function DataImportCenter({
           <ImportActionBar
             disabled={uploading || !configReady || !hasFiles}
             uploading={uploading}
-            hasFiles={hasFiles}
-            onClear={onClearFiles}
+            files={files}
+            onReselect={() => {
+              onClearFiles();
+              window.setTimeout(() => fileInputRef.current?.click(), 0);
+            }}
             onSubmit={onSubmit}
           />
         </div>
@@ -108,10 +75,10 @@ export default function DataImportCenter({
         <aside className="import-side-column">
           <ImportProcessSteps state={uploadState} hasFiles={hasFiles} />
           <section className="import-rule-card">
-            <h2>写入规则</h2>
-            <span>自动识别首个工作表</span>
-            <span>使用当前字段映射</span>
-            <span>表格内图片按后端能力处理</span>
+            <h2>执行规则</h2>
+            <span>目标：{targetTable === "paint" ? "油漆" : "胶板"}数据表</span>
+            <span>自动读取首个工作表</span>
+            <span>按当前字段映射写入</span>
           </section>
         </aside>
       </section>

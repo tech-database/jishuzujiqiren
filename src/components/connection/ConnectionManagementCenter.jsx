@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Bot, Database, FileSpreadsheet, Link2, MessageSquareText, Settings2, ShieldCheck } from "lucide-react";
-import { GlassCard, StatusBadge } from "../design-system";
+import { Bot, Database, FileSpreadsheet, MessageSquareText, Settings2, ShieldCheck } from "lucide-react";
 import { ConfigActionBar } from "./ConfigActionBar";
 import { ConfigSection } from "./ConfigSection";
 import { ConnectionStatusCard } from "./ConnectionStatusCard";
@@ -119,22 +118,6 @@ export default function ConnectionManagementCenter({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
     >
-      <GlassCard className="connection-management-hero">
-        <div className="section-title-block">
-          <span className="section-icon">
-            <Link2 size={24} />
-          </span>
-          <div>
-            <h2>系统连接与凭据管理中心</h2>
-            <p>集中管理飞书应用、多维表和机器人写入链路，敏感字段默认隐藏并按现有接口保存。</p>
-          </div>
-        </div>
-        <div className="connection-management-status">
-          <StatusBadge tone={configReady ? "success" : "warning"}>{configReady ? "配置已填写" : "配置缺失"}</StatusBadge>
-          {dirty && <StatusBadge tone="warning">有未保存修改</StatusBadge>}
-        </div>
-      </GlassCard>
-
       <section className="connection-status-grid" aria-label="连接状态概览">
         {statusCards.map((card, index) => (
           <motion.div

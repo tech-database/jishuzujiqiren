@@ -4,6 +4,7 @@ import {
   Activity,
   Bot,
   CheckCircle2,
+  ChevronLeft,
   ClipboardCheck,
   Copy,
   Database,
@@ -15,6 +16,7 @@ import {
   KeyRound,
   Link2,
   MessageSquareText,
+  Menu,
   Plus,
   RefreshCw,
   Save,
@@ -35,14 +37,15 @@ import {
   LiveLog,
   PageTransition,
   ProgressAnimation,
-  StatusPulse,
 } from "./components/motion";
 import { ErrorBoundary } from "./components/system/ErrorBoundary.jsx";
 import { getImportFileKey, validateImportFiles } from "./utils/importFileUtils";
-import { buildImportSuccessText, sanitizeImportError } from "./utils/importResultUtils";
+import { aggregateImportResults, buildImportSuccessText, sanitizeImportError } from "./utils/importResultUtils";
 import { parseMaterialCodes as parseMaterialCodeSummary, removeMaterialCodeAtIndex } from "./utils/materialCodeUtils";
 import { sanitizeAssignmentError } from "./utils/assignmentResultUtils";
 import "./styles.css";
+import "./styles/cockpit.css";
+import "./styles/saas-light.css";
 
 const MappingStudio = React.lazy(() => import("./components/field-mapping/MappingStudio.jsx"));
 const MonitoringCenter = React.lazy(() => import("./components/monitoring/MonitoringCenter.jsx"));
@@ -519,7 +522,7 @@ function ConnectionCenter({
   );
 }
 
-function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult, ownerStats }) {
+function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult, ownerStats, uploadState, uploadFiles }) {
   const taskLabels = {
     connection: "连接配置",
     mapping: "字段映射",
@@ -536,31 +539,77 @@ function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult,
     typeof completed === "number" && typeof total === "number" && total > 0
       ? (completed / total) * 100
       : null;
-  const statusLabel = healthStatus?.ok ? "检测通过" : configReady ? "等待检测" : "未知状态";
+  const failedHealthCheck = Object.values(healthStatus?.checks || {}).find((item) => item?.ok === false);
+  const statusLabel = healthStatus
+    ? healthStatus.ok ? "检测通过" : "连接异常"
+    : configReady ? "等待检测" : "未知状态";
+  const statusDetail = healthStatus?.ok
+    ? taskLabels[activeTab] || "控制中心"
+    : failedHealthCheck?.message || taskLabels[activeTab] || "控制中心";
+
+  if (activeTab === "upload") {
+    const importSummary = aggregateImportResults(uploadState?.results || []);
+    const queuedFiles = Array.isArray(uploadFiles) ? uploadFiles.length : 0;
+    const failedTasks = uploadState?.ok === false ? 1 : 0;
+    const processedRows = importSummary.parsedCount || importSummary.resultCount;
+    return (
+      <aside className="robot-status-widget status-overview import-status-overview" aria-label="数据导入状态">
+        <div className="status-overview-item">
+          <span className="status-overview-icon"><FileSpreadsheet size={19} /></span>
+          <span className="status-overview-copy"><small>待导入文件</small><AnimatedNumber value={queuedFiles} /><span>当前选择</span></span>
+        </div>
+        <div className="status-overview-item">
+          <span className="status-overview-icon"><CheckCircle2 size={19} /></span>
+          <span className="status-overview-copy"><small>成功写入</small><AnimatedNumber value={importSummary.resultCount} /><span>本次会话</span></span>
+        </div>
+        <div className="status-overview-item">
+          <span className="status-overview-icon"><Activity size={19} /></span>
+          <span className="status-overview-copy"><small>失败任务</small><AnimatedNumber value={failedTasks} /><span>本次会话</span></span>
+        </div>
+        <div className="status-overview-item">
+          <span className="status-overview-icon"><Database size={19} /></span>
+          <span className="status-overview-copy"><small>处理数据量</small><AnimatedNumber value={processedRows} /><span>解析记录</span></span>
+        </div>
+      </aside>
+    );
+  }
 
   return (
-    <aside className="robot-status-widget" aria-label="机器人状态">
-      <StatusPulse
-        tone={healthStatus?.ok ? "online" : configReady ? "running" : "standby"}
-        label={statusLabel}
-        detail={taskLabels[activeTab] || "控制中心"}
-      />
-      <div className="robot-status-metrics">
-        <span>
+    <aside className="robot-status-widget status-overview" aria-label="机器人状态">
+      <div className="status-overview-item detection">
+        <span className="status-overview-icon"><Activity size={19} /></span>
+        <span className="status-overview-copy">
+          <small>检测状态</small>
+          <strong>{statusLabel}</strong>
+          <span title={statusDetail}>{statusDetail}</span>
+        </span>
+      </div>
+      <div className="status-overview-item">
+        <span className="status-overview-icon"><Timer size={19} /></span>
+        <span className="status-overview-copy">
           <small>运行时间</small>
           <strong>当前接口未提供</strong>
+          <span>等待接口数据</span>
         </span>
-        <span>
+      </div>
+      <div className="status-overview-item">
+        <span className="status-overview-icon"><ClipboardCheck size={19} /></span>
+        <span className="status-overview-copy">
           <small>今日完成</small>
           {typeof completed === "number" ? <AnimatedNumber value={completed} /> : <strong>暂无数据</strong>}
+          <span>来自真实任务统计</span>
         </span>
-        <span>
+      </div>
+      <div className="status-overview-item">
+        <span className="status-overview-icon"><CheckCircle2 size={19} /></span>
+        <span className="status-overview-copy">
           <small>完成率</small>
           {typeof completionRate === "number" ? (
             <AnimatedNumber value={completionRate} decimals={1} suffix="%" />
           ) : (
             <strong>暂无数据</strong>
           )}
+          <span>按已检测任务计算</span>
         </span>
       </div>
     </aside>
@@ -852,13 +901,13 @@ const feishuCommands = [
     title: "绘图完成",
     command: "@机器人 料号 绘图完成",
     example: "@机器人 I-089F-K42 绘图完成 2026-07-11 2026-07-13",
-    result: "自动在胶板/油漆表匹配料号，状态改为绘图完成，并记录完成时间和用时。",
+    result: "自动在胶板/油漆表匹配料号，状态改为绘图完成，并将用时记录为分钟数。",
   },
   {
     title: "查询未领取",
-    command: "@机器人 查询未领取",
-    example: "@机器人 查询未领取",
-    result: "返回当前未领取图纸数量。",
+    command: "@机器人 查询未领取 / 胶板查询未领取 / 油漆查询未领取",
+    example: "@机器人 油漆查询未领取",
+    result: "默认分别返回胶板、油漆及合计数量；带胶板或油漆时只查询对应表。",
   },
   {
     title: "状态检测",
@@ -893,6 +942,8 @@ function App() {
   const [fieldMappings, setFieldMappings] = useState({});
   const [nameIdRows, setNameIdRows] = useState([{ id: "", name: "" }]);
   const [activeTab, setActiveTab] = useState("connection");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [targetTable, setTargetTable] = useState("board");
   const fileInputRef = useRef(null);
   const [uploadFiles, setUploadFiles] = useState([]);
@@ -1349,6 +1400,28 @@ function App() {
     }
   }
 
+  async function recalculateDrawingDurations() {
+    setStatusState(null);
+    setStatusSyncing(true);
+    try {
+      const response = await fetch("/api/recalculate-drawing-durations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...statusDateRange, tableKey: targetTable }),
+      });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error);
+      setStatusState({
+        ok: true,
+        text: `用时重算完成：检查 ${data.summary.scanned} 条，可计算 ${data.summary.eligible} 条，更新 ${data.summary.updated} 条，缺少时间 ${data.summary.missingTime} 条`,
+      });
+    } catch (error) {
+      setStatusState({ ok: false, text: error.message });
+    } finally {
+      setStatusSyncing(false);
+    }
+  }
+
   async function loadBackgroundSyncStatus() {
     try {
       const response = await fetch("/api/background-status-sync");
@@ -1412,17 +1485,123 @@ function App() {
   return (
     <>
       <LightFallBackground />
-      <main className="app-shell">
-      <header className="page-header">
-        <div className="header-main">
-          <div className="app-mark">
-            <Bot size={24} />
-          </div>
-          <div>
-            <h1>技术组机器人控制台</h1>
-            <p>连接飞书开放平台与多维表，把 Excel、图片附件和领图任务稳定写入目标表格。</p>
-          </div>
+      <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavigationOpen ? "mobile-nav-open" : ""}`}>
+      <aside className="app-sidebar" aria-label="主导航">
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-mark" aria-hidden="true"><Bot size={30} /></span>
+          <span className="sidebar-brand-copy">
+            <strong>技术组机器人</strong>
+            <small>自动化控制台</small>
+          </span>
         </div>
+
+        <nav className="tab-bar" aria-label="功能菜单">
+          <button
+            className={`tab-button ${activeTab === "connection" ? "active" : ""}`}
+            onClick={() => { setActiveTab("connection"); setMobileNavigationOpen(false); }}
+            title="连接配置"
+          >
+            <Settings2 size={20} />
+            <span className="tab-label">连接配置</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === "mapping" ? "active" : ""}`}
+            onClick={() => { setActiveTab("mapping"); setMobileNavigationOpen(false); }}
+            title="字段映射"
+          >
+            <Database size={20} />
+            <span className="tab-label">字段映射</span>
+            {bitableFields.length > 0 && <span className="tab-count">{bitableFields.length}</span>}
+          </button>
+          <button
+            className={`tab-button ${activeTab === "commands" ? "active" : ""}`}
+            onClick={() => { setActiveTab("commands"); setMobileNavigationOpen(false); }}
+            title="飞书口令"
+          >
+            <MessageSquareText size={20} />
+            <span className="tab-label">飞书口令</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === "people" ? "active" : ""}`}
+            onClick={() => { setActiveTab("people"); setMobileNavigationOpen(false); }}
+            title="人员映射"
+          >
+            <UsersRound size={20} />
+            <span className="tab-label">人员映射</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === "status" ? "active" : ""}`}
+            onClick={() => { setActiveTab("status"); setMobileNavigationOpen(false); }}
+            title="状态检测"
+          >
+            <Activity size={20} />
+            <span className="tab-label">状态检测</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === "owners" ? "active" : ""}`}
+            onClick={() => { setActiveTab("owners"); setMobileNavigationOpen(false); }}
+            title="绘图人动态"
+          >
+            <UsersRound size={20} />
+            <span className="tab-label">绘图人动态</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === "upload" ? "active" : ""}`}
+            onClick={() => { setActiveTab("upload"); setMobileNavigationOpen(false); }}
+            title="新增"
+          >
+            <FileUp size={20} />
+            <span className="tab-label">新增</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === "drawing" ? "active" : ""}`}
+            onClick={() => { setActiveTab("drawing"); setMobileNavigationOpen(false); }}
+            title="领图"
+          >
+            <Images size={20} />
+            <span className="tab-label">领图</span>
+          </button>
+        </nav>
+
+        <div className="sidebar-system-card" aria-label="机器人系统状态">
+          <span className="sidebar-system-icon"><Bot size={17} /></span>
+          <span className="sidebar-system-copy">
+            <strong>{configReady ? "机器人已就绪" : "等待配置"}</strong>
+            <small>控制台 v0.1.0</small>
+          </span>
+          <span className={`sidebar-system-dot ${configReady ? "online" : "standby"}`} />
+        </div>
+
+        <button
+          className="sidebar-collapse-button"
+          type="button"
+          onClick={() => setSidebarCollapsed((current) => !current)}
+          aria-label={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+          title={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+        >
+          <ChevronLeft size={18} />
+          <span>{sidebarCollapsed ? "展开菜单" : "收起菜单"}</span>
+        </button>
+      </aside>
+
+      <button
+        className="mobile-navigation-backdrop"
+        type="button"
+        aria-label="关闭导航"
+        onClick={() => setMobileNavigationOpen(false)}
+      />
+
+      <div className="app-main">
+      <main className="app-shell">
+      <div className="global-status-row">
+        <button
+          className="mobile-menu-button"
+          type="button"
+          onClick={() => setMobileNavigationOpen(true)}
+          aria-label="打开导航"
+        >
+          <Menu size={20} />
+        </button>
         <div className="header-status">
           <Pill tone={configReady ? "success" : "warning"} icon={ShieldCheck}>
             {configReady ? "配置已加载" : "等待配置"}
@@ -1431,7 +1610,7 @@ function App() {
             {healthLoading && !healthStatus ? "正在检查飞书" : healthStatus?.label || "等待飞书检查"}
           </Pill>
         </div>
-      </header>
+      </div>
 
       <RobotStatusWidget
         activeTab={activeTab}
@@ -1439,69 +1618,11 @@ function App() {
         healthStatus={healthStatus}
         statusResult={statusResult}
         ownerStats={ownerStats}
+        uploadState={uploadState}
+        uploadFiles={uploadFiles}
       />
 
       <ProgressBar active={configLoading} label="正在刷新配置" />
-
-      <nav className="tab-bar" aria-label="功能菜单">
-        <button
-          className={`tab-button ${activeTab === "connection" ? "active" : ""}`}
-          onClick={() => setActiveTab("connection")}
-        >
-          <Settings2 size={18} />
-          连接配置
-        </button>
-        <button
-          className={`tab-button ${activeTab === "mapping" ? "active" : ""}`}
-          onClick={() => setActiveTab("mapping")}
-        >
-          <Database size={18} />
-          字段映射
-          <span>{bitableFields.length}</span>
-        </button>
-        <button
-          className={`tab-button ${activeTab === "commands" ? "active" : ""}`}
-          onClick={() => setActiveTab("commands")}
-        >
-          <MessageSquareText size={18} />
-          飞书口令
-        </button>
-        <button
-          className={`tab-button ${activeTab === "people" ? "active" : ""}`}
-          onClick={() => setActiveTab("people")}
-        >
-          <UsersRound size={18} />
-          人员映射
-        </button>
-        <button
-          className={`tab-button ${activeTab === "status" ? "active" : ""}`}
-          onClick={() => setActiveTab("status")}
-        >
-          <Activity size={18} />
-          状态检测
-        </button>
-        <button
-          className={`tab-button ${activeTab === "owners" ? "active" : ""}`}
-          onClick={() => setActiveTab("owners")}
-        >
-          <UsersRound size={18} />
-          绘图人动态
-        </button>
-        <button
-          className={`tab-button ${activeTab === "upload" ? "active" : ""}`}
-          onClick={() => setActiveTab("upload")}
-        >
-          <FileUp size={18} />
-          新增
-        </button>
-        <button
-          className={`tab-button ${activeTab === "drawing" ? "active" : ""}`}
-          onClick={() => setActiveTab("drawing")}
-        >
-          <Images size={18} />
-          领图
-        </button>
-      </nav>
 
       {activeTab === "connection" && (
         <React.Suspense
@@ -1750,6 +1871,7 @@ function App() {
             statusResult={statusResult}
             statusState={statusState}
             syncDrawingStatus={syncDrawingStatus}
+            recalculateDrawingDurations={recalculateDrawingDurations}
             formatDisplayTime={formatDisplayTime}
           />
         </React.Suspense>
@@ -1894,14 +2016,18 @@ function App() {
 
       {activeTab === "commands" && (
         <React.Suspense fallback={<div className="glass-skeleton command-skeleton" />}>
-          <CommandCenter commands={feishuCommands} />
+          <CommandCenter commands={feishuCommands} onRefresh={loadConfig} />
         </React.Suspense>
       )}
 
-      <button className="refresh-fab" onClick={loadConfig} aria-label="刷新配置" title="刷新配置">
-        <RefreshCw size={18} />
-      </button>
+      {!(["commands", "status"].includes(activeTab)) && (
+        <button className="refresh-fab" onClick={loadConfig} aria-label="刷新配置" title="刷新配置">
+          <RefreshCw size={18} />
+        </button>
+      )}
       </main>
+      </div>
+      </div>
     </>
   );
 }

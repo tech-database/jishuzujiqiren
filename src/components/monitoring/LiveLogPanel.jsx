@@ -11,6 +11,15 @@ const levelIcon = {
   unknown: Info,
 };
 
+const levelTitle = {
+  info: "系统事件",
+  success: "检测完成",
+  warning: "任务状态变化",
+  error: "检测异常",
+  debug: "调试信息",
+  unknown: "系统事件",
+};
+
 function LiveLogPanelComponent({ logs, loading }) {
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("all");
@@ -63,12 +72,16 @@ function LiveLogPanelComponent({ logs, loading }) {
             const Icon = levelIcon[log.level] || levelIcon.unknown;
             return (
               <article className={`monitoring-log-row ${log.level}`} key={log.id}>
-                <span className="monitoring-log-level">
+                <span className="monitoring-log-marker" aria-hidden="true">
                   <Icon size={15} />
-                  {log.level}
                 </span>
-                <time>{log.time}</time>
-                <p>{log.message}</p>
+                <div className="monitoring-log-content">
+                  <div>
+                    <strong>{levelTitle[log.level] || levelTitle.unknown}</strong>
+                    <time>{log.time}</time>
+                  </div>
+                  <p>{log.message}</p>
+                </div>
                 <button type="button" onClick={() => copyLog(log)} aria-label="复制日志">
                   <Clipboard size={15} />
                 </button>

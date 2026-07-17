@@ -7340,6 +7340,205 @@ button {
   }
 }
 
+/* Compact all-operator production overview */
+.drawing-center {
+  gap: 14px;
+}
+
+.global-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 34px;
+  margin-bottom: 12px;
+}
+
+.global-status-row .header-status {
+  gap: 8px;
+}
+
+.drawing-center > .page-header {
+  margin-bottom: 0;
+  padding: 20px 22px;
+}
+
+.drawing-refresh-meta {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.drawing-summary-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(22, 119, 255, 0.13);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.drawing-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 72px;
+  padding: 14px 18px;
+  border-right: 1px solid rgba(22, 119, 255, 0.1);
+  background: transparent;
+}
+
+.drawing-summary-card:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 1280px) {
+  .drawing-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .drawing-summary-card:nth-child(3) {
+    border-right: 0;
+  }
+
+  .drawing-summary-card:nth-child(-n + 3) {
+    border-bottom: 1px solid rgba(22, 119, 255, 0.1);
+  }
+}
+
+.drawing-summary-card strong {
+  color: var(--color-primary);
+  font-size: 26px;
+}
+
+.drawing-operator-grid,
+.drawing-loading-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.drawing-operator-card {
+  display: grid;
+  align-content: start;
+  gap: 11px;
+  min-width: 0;
+  min-height: 214px;
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 14px;
+  box-shadow: 0 4px 8px rgba(28, 74, 128, 0.06);
+}
+
+.drawing-operator-card.drawing,
+.drawing-operator-card.idle,
+.drawing-operator-card.unknown {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.drawing-operator-card.drawing { border-color: rgba(245, 158, 11, 0.36); }
+.drawing-operator-card.idle { border-color: rgba(34, 197, 94, 0.3); }
+.drawing-operator-card.unknown { border-color: rgba(239, 68, 68, 0.34); }
+
+.drawing-operator-head {
+  align-items: center;
+}
+
+.drawing-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+
+.drawing-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 27px;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.drawing-status.drawing { color: #a65800; background: rgba(245, 158, 11, 0.13); }
+.drawing-status.idle { color: #16803b; background: rgba(34, 197, 94, 0.11); }
+.drawing-status.unknown { color: #c62939; background: rgba(239, 68, 68, 0.1); }
+
+.drawing-current-task {
+  gap: 5px;
+}
+
+.drawing-current-task > div {
+  min-height: 34px;
+  border: 1px solid rgba(22, 119, 255, 0.11);
+  border-radius: 10px;
+  background: #fff;
+  padding-left: 10px;
+}
+
+.drawing-current-task code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.drawing-current-task .drawing-copy-button {
+  min-height: 30px;
+  border: 0;
+  border-left: 1px solid rgba(22, 119, 255, 0.1);
+  border-radius: 0 9px 9px 0;
+}
+
+.drawing-operator-metrics span {
+  gap: 3px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(241, 247, 255, 0.72);
+  padding: 7px 9px;
+}
+
+.drawing-operator-metrics strong {
+  font-size: 17px;
+}
+
+.drawing-card-detail-button {
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  justify-self: start;
+}
+
+@media (max-width: 920px) {
+  .drawing-operator-grid,
+  .drawing-loading-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .global-status-row {
+    justify-content: space-between;
+  }
+
+  .drawing-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .drawing-summary-card:nth-child(2) { border-right: 0; }
+  .drawing-summary-card:nth-child(3) { border-right: 1px solid rgba(22, 119, 255, 0.1); }
+  .drawing-summary-card:nth-child(4) { border-right: 0; }
+  .drawing-summary-card:nth-child(-n + 4) { border-bottom: 1px solid rgba(22, 119, 255, 0.1); }
+
+  .drawing-operator-grid,
+  .drawing-loading-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .app-error-boundary {
   display: grid;
   justify-items: start;

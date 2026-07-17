@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Database, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
-import { GlassButton, GlassCard, StatusBadge } from "../design-system";
+import { GlassCard } from "../design-system";
 import { MappingCanvas } from "./MappingCanvas.jsx";
 import { MappingLegend } from "./MappingLegend.jsx";
 import { MappingToolbar } from "./MappingToolbar.jsx";
@@ -131,38 +130,20 @@ export default function MappingStudio({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
     >
-      <GlassCard className="mapping-studio-header">
-        <div className="section-title-block">
-          <span className="section-icon">
-            <Database size={24} />
-          </span>
-          <div>
-            <h2>智能字段映射工作台</h2>
-            <p>用可视化连线管理 Excel 列标题与飞书多维表字段的对应关系，保存时仍写入现有配置格式。</p>
-          </div>
-        </div>
-        <div className="mapping-header-actions">
-          <StatusBadge tone={configReady ? "success" : "warning"}>
-            {configReady ? "配置已填写" : "等待配置"}
-          </StatusBadge>
-          <GlassButton variant="secondary" onClick={onLoadFields} disabled={loading}>
-            <RefreshCw size={17} />
-            {loading ? "读取中" : "读取字段"}
-          </GlassButton>
-        </div>
-      </GlassCard>
-
       <MappingToolbar
         stats={stats}
         addExcelFieldValue={addExcelFieldValue}
         onAddExcelFieldValueChange={setAddExcelFieldValue}
         onAddExcelField={handleAddExcelField}
         onSmartMatch={handleSmartMatch}
+        onLoadFields={onLoadFields}
         onSave={handleSave}
         onReset={handleReset}
         saving={saving}
         dirty={dirty}
         disabled={loading || bitableFields.length === 0}
+        loading={loading}
+        configReady={configReady}
       />
 
       {effectiveFeedback && (

@@ -19,6 +19,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.join(__dirname, ".runtime");
 const websocketStatusPath = path.join(runtimeDir, "long-connection-status.json");
 const spreadsheetProcessedPath = path.join(runtimeDir, "spreadsheet-processed.json");
+const longConnectionEnabled = process.env.FEISHU_LONG_CONNECTION_ENABLED !== "false";
+
+if (!longConnectionEnabled) {
+  console.log("Feishu long connection is disabled on this instance; messages are handled by the remote server.");
+  process.exit(0);
+}
+
 const REPLY_OK = "\u5199\u5165\u5df2\u7ecf\u5b8c\u6210";
 const ACTIVATION_REPLY = "\u6536\u5230\u65b0\u589e\u6307\u4ee4\uff0c\u8bf7\u4e0a\u4f20\u4f60\u8981\u5199\u5165\u7684 Excel \u8868\u683c\uff0c\u5168\u90e8\u4e0a\u4f20\u540e\u53d1\u9001\uff1a@\u673a\u5668\u4eba \u5b8c\u6210\u3002";
 const NO_FILES_REPLY = "\u672c\u6b21\u65b0\u589e\u672a\u6536\u5230\u4f60\u4e0a\u4f20\u7684 Excel \u8868\u683c\uff0c\u5df2\u7ed3\u675f\u3002";
@@ -120,6 +127,13 @@ function commandTableKey(content) {
   return String(content || "").includes("油漆") ? "paint" : "board";
 }
 
+function optionalCommandTableKey(content) {
+  const text = String(content || "");
+  if (text.includes("油漆")) return "paint";
+  if (text.includes("胶板")) return "board";
+  return undefined;
+}
+
 function isTableCreateCommand(content) {
   return /(?:胶板|油漆)\s*新增/.test(String(content || ""));
 }
@@ -129,8 +143,8 @@ function commandHelpText() {
     "飞书机器人口令：",
     "1. @机器人 胶板新增 / @机器人 油漆新增：开始上传 Excel/CSV，上传完成后发送 @机器人 完成",
     "2. @机器人 料号 领图：自动在胶板/油漆表匹配料号，把发送人写入绘图人并改为绘图中",
-    "3. @机器人 料号 绘图完成：自动在胶板/油漆表匹配料号，改为绘图完成并记录完成时间/用时",
-    "4. @机器人 查询未领取：统计胶板/油漆表当前未领取图纸",
+    "3. @机器人 料号 绘图完成：自动在胶板/油漆表匹配料号，改为绘图完成并记录完成时间/用时（分钟数）",
+    "4. @机器人 查询未领取：分别统计胶板、油漆和合计；也可发送 胶板查询未领取 / 油漆查询未领取 单独查询",
     "5. @机器人 状态检测：按默认日期范围同步状态并返回数量",
     "6. @机器人 获取ID：回复发送人的飞书用户 ID",
     "日期范围可选：在口令后追加 2026-07-11 2026-07-13；不写则默认前天、昨天、今天。",
@@ -212,8 +226,21 @@ async function handleDrawingComplete(message) {
 }
 
 async function handleUnclaimedQuery(message) {
-  const result = await queryUnclaimedDrawings();
-  await sendReply(message.chatId, `查询完成：共有 ${result.count} 条图纸未被领取。`);
+  const tableKey = optionalCommandTableKey(message.content);
+  const result = await queryUnclaimedDrawings({ tableKey });
+
+  if (tableKey) {
+    const tableLabel = tableKey === "paint" ? "油漆" : "胶板";
+    await sendReply(message.chatId, `${tableLabel}查询完成：共有 ${result.count} 条图纸未被领取。`);
+    return;
+  }
+
+  const boardCount = result.items.filter((item) => item.table === "board").length;
+  const paintCount = result.items.filter((item) => item.table === "paint").length;
+  await sendReply(
+    message.chatId,
+    `查询完成：胶板 ${boardCount} 条，油漆 ${paintCount} 条，合计 ${result.count} 条图纸未被领取。`,
+  );
 }
 
 async function handleStatusSync(message) {

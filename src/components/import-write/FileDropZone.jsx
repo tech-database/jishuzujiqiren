@@ -33,8 +33,8 @@ export default function FileDropZone({
         <UploadCloud size={32} />
       </div>
       <div>
-        <h2>选择数据文件</h2>
-        <p>支持 .xlsx、.xls、.csv，单个文件最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)}。</p>
+        <h2>{dragging ? "松开即可添加文件" : "拖拽文件到这里"}</h2>
+        <p>支持 Excel / CSV · 单个文件最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)}</p>
       </div>
       <input
         ref={fileInputRef}
@@ -47,7 +47,7 @@ export default function FileDropZone({
       />
       <button type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
         <FileSpreadsheet size={18} />
-        选择文件
+        浏览文件
       </button>
     </section>
   );

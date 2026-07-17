@@ -1,4 +1,4 @@
-import { RotateCcw, Save, Search, Wand2 } from "lucide-react";
+import { RefreshCw, RotateCcw, Save, Search, Wand2 } from "lucide-react";
 import { GlassButton, StatusBadge } from "../design-system";
 
 export function MappingToolbar({
@@ -7,11 +7,14 @@ export function MappingToolbar({
   onAddExcelFieldValueChange,
   onAddExcelField,
   onSmartMatch,
+  onLoadFields,
   onSave,
   onReset,
   saving,
   dirty,
   disabled,
+  loading,
+  configReady,
 }) {
   return (
     <div className="mapping-toolbar">
@@ -34,6 +37,10 @@ export function MappingToolbar({
       </form>
 
       <div className="mapping-toolbar-actions">
+        <GlassButton variant="secondary" onClick={onLoadFields} disabled={loading || !configReady}>
+          <RefreshCw size={17} className={loading ? "spin" : ""} />
+          {loading ? "读取中" : "读取字段"}
+        </GlassButton>
         <GlassButton variant="secondary" onClick={onSmartMatch} disabled={disabled}>
           <Wand2 size={17} />
           智能匹配

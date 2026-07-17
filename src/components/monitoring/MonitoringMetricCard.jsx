@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Clock, Loader2 } from "lucide-react";
-import { GlassCard, StatusBadge } from "../design-system";
+import { GlassCard } from "../design-system";
 
 const iconMap = {
   total: Activity,
@@ -26,7 +26,7 @@ function MonitoringMetricCardComponent({ metric, loading, formatDisplayTime }) {
         <span className="monitoring-metric-icon">
           <Icon size={20} />
         </span>
-        <StatusBadge tone={metric.tone === "danger" ? "error" : metric.tone}>{loading ? "加载中" : metric.helper}</StatusBadge>
+        <span className="monitoring-metric-context">{loading ? "加载中" : metric.helper}</span>
       </div>
       {loading ? (
         <div className="monitoring-skeleton metric" />

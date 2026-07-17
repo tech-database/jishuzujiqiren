@@ -1,7 +1,6 @@
-import { Search, X } from "lucide-react";
-import { StatusBadge } from "../design-system";
+import { RefreshCw, Search, X } from "lucide-react";
 
-export default function CommandToolbar({ query, onQueryChange, total, filtered }) {
+export default function CommandToolbar({ query, onQueryChange, total, filtered, onRefresh }) {
   return (
     <div className="command-toolbar">
       <label className="command-search-field">
@@ -20,11 +19,11 @@ export default function CommandToolbar({ query, onQueryChange, total, filtered }
       </label>
 
       <div className="command-toolbar-meta">
-        <StatusBadge tone="neutral">{filtered} / {total} 条口令</StatusBadge>
-        <StatusBadge tone="warning">只读清单</StatusBadge>
-        <span className="command-interface-note" title="当前后端未提供口令管理接口">
-          管理接口未开放
-        </span>
+        <span className="command-count-label">{filtered} / {total} 条口令</span>
+        <button className="command-refresh-button" type="button" onClick={onRefresh}>
+          <RefreshCw size={16} />
+          刷新
+        </button>
       </div>
     </div>
   );

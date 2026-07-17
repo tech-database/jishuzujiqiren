@@ -14,5 +14,5 @@ export function AnimatedNumber({ value = 0, decimals = 0, suffix = "", className
     return controls.stop;
   }, [motionValue, numericValue]);
 
-  return <motion.strong className={className}>{rounded}</motion.strong>;
+  return <motion.strong className={`animated-number ${className}`.trim()}>{rounded}</motion.strong>;
 }

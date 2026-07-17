@@ -1,87 +1,56 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
-import { Activity, Clock3, Database, UserRound } from "lucide-react";
-import { GlassCard, StatusBadge } from "../design-system";
+import { AlertCircle, Circle, Clock3, UserRound } from "lucide-react";
 import CopyPartNumberButton from "./CopyPartNumberButton";
-import { getOperatorActivePartNumber, getVisibleActiveItems } from "../../utils/drawingDataTransform";
+import { getOperatorActivePartNumber } from "../../utils/drawingDataTransform";
+
+const statusIcons = {
+  drawing: Clock3,
+  idle: Circle,
+  unknown: AlertCircle,
+};
 
 function DrawingOperatorCard({ operator, index, onSelect }) {
   const activePart = getOperatorActivePartNumber(operator);
-  const visibleItems = getVisibleActiveItems(operator, 4);
+  const StatusIcon = statusIcons[operator.status.key] || AlertCircle;
 
   return (
-    <motion.div
+    <motion.article
       layout
-      initial={{ opacity: 0, y: 14 }}
+      className={`drawing-operator-card ${operator.status.key}`}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.22, delay: Math.min(index * 0.018, 0.12), ease: [0.22, 1, 0.36, 1] }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2, delay: Math.min(index * 0.018, 0.1), ease: [0.22, 1, 0.36, 1] }}
     >
-      <GlassCard className={`drawing-operator-card ${operator.status.key}`} as="article">
-        <header className="drawing-operator-head">
-          <div className="drawing-operator-title">
-            <span className="drawing-avatar" aria-hidden="true">
-              <UserRound size={18} />
-            </span>
-            <div>
-              <h2>{operator.owner}</h2>
-              <small>{operator.totalOwned} 条关联记录</small>
-            </div>
-          </div>
-          <StatusBadge tone={operator.status.tone}>
-            {operator.status.key === "drawing" ? <Activity size={13} /> : <Clock3 size={13} />}
-            {operator.status.label}
-          </StatusBadge>
-        </header>
-
-        <div className="drawing-current-task">
-          <span>当前料号</span>
-          {activePart ? (
-            <div>
-              <code title={activePart}>{activePart}</code>
-              <CopyPartNumberButton value={activePart} />
-            </div>
-          ) : (
-            <p>暂无当前绘图料号</p>
-          )}
+      <header className="drawing-operator-head">
+        <div className="drawing-operator-title">
+          <span className="drawing-avatar" aria-hidden="true"><UserRound size={18} /></span>
+          <h2>{operator.owner}</h2>
         </div>
+        <span className={`drawing-status ${operator.status.key}`}>
+          <StatusIcon size={12} fill="currentColor" />{operator.status.label}
+        </span>
+      </header>
 
-        <div className="drawing-operator-metrics">
-          <span>
-            <small>当前任务</small>
-            <strong>{operator.drawingCount}</strong>
-          </span>
-          <span>
-            <small>今日接图</small>
-            <strong>{operator.todayClaimed}</strong>
-          </span>
-          <span>
-            <small>今日完成</small>
-            <strong>{operator.todayCompleted}</strong>
-          </span>
+      <div className="drawing-current-task">
+        <span>当前料号</span>
+        <div>
+          <code title={activePart || "暂无当前料号"}>{activePart || "暂无"}</code>
+          {activePart && <CopyPartNumberButton value={activePart} />}
         </div>
+      </div>
 
-        <div className="drawing-card-progress-note">
-          <Database size={14} />
-          当前接口未提供可靠任务进度字段
-        </div>
+      <div className="drawing-operator-metrics">
+        <span><small>当前任务</small><strong>{operator.drawingCount}</strong></span>
+        <span><small>今日接图</small><strong>{operator.todayClaimed}</strong></span>
+        <span><small>今日完成</small><strong>{operator.todayCompleted}</strong></span>
+      </div>
 
-        {visibleItems.items.length > 0 && (
-          <div className="drawing-active-chips" aria-label={`${operator.owner} 活跃料号`}>
-            {visibleItems.items.map((item) => (
-              <code title={item.materialCode} key={`${item.table}:${item.recordId}`}>
-                {item.materialCode}
-              </code>
-            ))}
-            {visibleItems.hiddenCount > 0 && <span>+{visibleItems.hiddenCount}</span>}
-          </div>
-        )}
-
-        <button className="drawing-card-detail-button" type="button" onClick={() => onSelect(operator)}>
-          查看任务明细
-        </button>
-      </GlassCard>
-    </motion.div>
+      <button className="drawing-card-detail-button" type="button" onClick={() => onSelect(operator)}>
+        查看任务明细
+      </button>
+    </motion.article>
   );
 }
 

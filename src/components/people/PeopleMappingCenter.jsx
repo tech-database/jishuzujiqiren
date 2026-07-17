@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Database, Fingerprint, UserRoundCheck, UsersRound } from "lucide-react";
-import { GlassCard, PageHeader, StatusBadge } from "../design-system";
+import { Database, Fingerprint, UsersRound } from "lucide-react";
+import { GlassCard } from "../design-system";
 import { PageTransition } from "../motion";
 import {
   arePeopleRowsEqual,
@@ -76,22 +76,6 @@ export default function PeopleMappingCenter({
 
   return (
     <PageTransition className="people-center">
-      <PageHeader
-        icon={<UserRoundCheck size={24} />}
-        title="人员身份映射中心"
-        description="管理飞书用户 ID 与人员姓名的映射关系，用于领图登记时识别真实绘图人员。"
-        actions={(
-          <>
-            <StatusBadge tone={hasUnsavedChanges ? "warning" : "neutral"}>
-              {hasUnsavedChanges ? "草稿未保存" : "草稿已同步"}
-            </StatusBadge>
-            <StatusBadge tone={stats.total > 0 ? "success" : "warning"}>
-              {stats.total > 0 ? `${stats.total} 条映射` : "暂无数据"}
-            </StatusBadge>
-          </>
-        )}
-      />
-
       <section className="people-stat-grid" aria-label="人员映射统计">
         <GlassCard className="people-stat-card" as="article">
           <span>

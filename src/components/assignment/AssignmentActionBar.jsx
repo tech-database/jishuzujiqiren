@@ -1,8 +1,7 @@
-import { CheckCircle2, Search, UserRoundCheck, X } from "lucide-react";
+import { CheckCircle2, Search, X } from "lucide-react";
 import { GlassButton } from "../design-system";
 
 export default function AssignmentActionBar({
-  claimDisabled,
   completeDisabled,
   queryDisabled,
   querying,
@@ -12,14 +11,9 @@ export default function AssignmentActionBar({
   onClear,
   onQuery,
   onComplete,
-  onClaim,
 }) {
   return (
     <section className="assignment-action-bar">
-      <div>
-        <strong>{hasCodes ? "任务已准备" : "等待料号"}</strong>
-        <span>{claimDisabled ? "请确认配置、料号和领取人" : "可提交领图登记或同步绘图完成状态"}</span>
-      </div>
       <div>
         <GlassButton type="button" variant="secondary" onClick={onClear} disabled={claiming || completing || querying || !hasCodes}>
           <X size={16} />
@@ -32,10 +26,6 @@ export default function AssignmentActionBar({
         <GlassButton type="button" variant="secondary" onClick={onComplete} disabled={completeDisabled || completing || claiming || querying}>
           <CheckCircle2 size={16} />
           {completing ? "同步中" : "绘图完成"}
-        </GlassButton>
-        <GlassButton type="button" variant="primary" onClick={onClaim} disabled={claimDisabled || claiming || completing || querying}>
-          <UserRoundCheck size={16} />
-          {claiming ? "提交中" : "提交领图"}
         </GlassButton>
       </div>
     </section>

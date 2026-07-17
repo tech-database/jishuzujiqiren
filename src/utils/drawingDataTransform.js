@@ -12,7 +12,7 @@ function normalizeDrawingStatus(status) {
   if (normalized === "idle") {
     return { key: "idle", label: "空闲", tone: "success" };
   }
-  return { key: "unknown", label: "未知状态", tone: "neutral" };
+  return { key: "unknown", label: "异常", tone: "danger" };
 }
 
 function normalizeActiveItems(items = []) {

@@ -2,7 +2,7 @@ import { memo } from "react";
 
 const statusColors = {
   unclaimed: "#F59E0B",
-  drawing: "#00C2FF",
+  drawing: "#2563EB",
   done: "#22C55E",
   abnormal: "#EF4444",
 };

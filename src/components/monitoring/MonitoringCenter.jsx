@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Activity, RefreshCw, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, Calculator, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
 import { GlassButton, GlassCard, StatusBadge } from "../design-system";
 import { StatusPulse } from "../motion";
 import { CompletionRateChart } from "./CompletionRateChart";
@@ -60,6 +60,7 @@ export default function MonitoringCenter({
   statusResult,
   statusState,
   syncDrawingStatus,
+  recalculateDrawingDurations,
   formatDisplayTime,
 }) {
   const normalized = useMemo(
@@ -69,7 +70,7 @@ export default function MonitoringCenter({
   const distribution = useMemo(() => buildStatusDistribution(normalized.summary), [normalized.summary]);
   const completionRate = useMemo(() => calculateCompletionRate(normalized.summary), [normalized.summary]);
   const metrics = useMemo(
-    () => buildMetricCards(normalized, backgroundSyncStatus),
+    () => buildMetricCards(normalized, backgroundSyncStatus).filter((metric) => metric.key !== "lastCheckedAt"),
     [backgroundSyncStatus, normalized],
   );
   const logs = useMemo(
@@ -84,6 +85,13 @@ export default function MonitoringCenter({
       : configReady
         ? "等待检测"
         : "未知状态";
+  const hasBackgroundError = Boolean(backgroundSyncStatus?.lastError);
+  const lastCheckedLabel = backgroundSyncStatus?.lastCheckedAt
+    ? formatDisplayTime(backgroundSyncStatus.lastCheckedAt)
+    : "等待首次检测";
+  const intervalLabel = backgroundSyncStatus?.intervalMs
+    ? `${Math.round(backgroundSyncStatus.intervalMs / 1000)} 秒自动检查`
+    : "自动检查间隔未提供";
 
   return (
     <motion.section
@@ -103,6 +111,10 @@ export default function MonitoringCenter({
           </div>
         </div>
         <div className="monitoring-hero-status">
+          <div className="monitoring-runtime-meta">
+            <span><Clock3 size={14} />最近检测 {lastCheckedLabel}</span>
+            <span>{intervalLabel}</span>
+          </div>
           <StatusPulse
             tone={statusSyncing ? "running" : healthTone}
             label={statusSyncing ? "检测中" : healthLabel}
@@ -133,6 +145,10 @@ export default function MonitoringCenter({
         </div>
         <div className="monitoring-control-actions">
           {statusState && <div className={`monitoring-inline-result ${statusState.ok ? "ok" : "error"}`}>{statusState.text}</div>}
+          <GlassButton variant="secondary" onClick={recalculateDrawingDurations} disabled={statusSyncing || !configReady}>
+            <Calculator size={17} />
+            {statusSyncing ? "处理中" : "重算用时"}
+          </GlassButton>
           <GlassButton variant="primary" onClick={() => syncDrawingStatus()} disabled={statusSyncing || !configReady}>
             <RefreshCw size={17} />
             {statusSyncing ? "检测中" : "立即检测"}
@@ -154,7 +170,7 @@ export default function MonitoringCenter({
       </section>
 
       <section className="monitoring-chart-grid">
-        <GlassCard className="monitoring-chart-card">
+        <GlassCard className="monitoring-chart-card monitoring-distribution-card">
           <div className="monitoring-panel-head">
             <div>
               <h3>任务状态分布</h3>
@@ -165,7 +181,7 @@ export default function MonitoringCenter({
           <TaskStatusChart distribution={distribution} loading={statusSyncing && !normalized.hasSummary} />
         </GlassCard>
 
-        <GlassCard className="monitoring-chart-card">
+        <GlassCard className="monitoring-chart-card monitoring-completion-card">
           <div className="monitoring-panel-head">
             <div>
               <h3>完成率</h3>
@@ -178,23 +194,29 @@ export default function MonitoringCenter({
       </section>
 
       <section className="monitoring-insight-grid">
-        <GlassCard className="monitoring-error-panel">
+        <GlassCard className={`monitoring-error-panel ${hasBackgroundError ? "has-error" : "healthy"}`}>
           <div className="monitoring-panel-head">
             <div>
-              <h3>异常情况</h3>
-              <p>仅展示接口真实返回的后台错误，不猜测异常分类。</p>
+              <h3>{hasBackgroundError ? "异常监控" : "当前运行正常"}</h3>
+              <p>{hasBackgroundError ? "检测到后台接口返回错误，请及时处理。" : "后台检测链路当前没有异常记录。"}</p>
             </div>
-            <StatusBadge tone={backgroundSyncStatus?.lastError ? "error" : "neutral"}>
-              {backgroundSyncStatus?.lastError ? "有异常" : "暂无异常"}
+            <StatusBadge tone={hasBackgroundError ? "error" : "success"}>
+              {hasBackgroundError ? "需要处理" : "运行正常"}
             </StatusBadge>
           </div>
-          {backgroundSyncStatus?.lastError ? (
+          {hasBackgroundError ? (
             <div className="monitoring-error-message">
-              <ShieldCheck size={18} />
+              <AlertTriangle size={18} />
               <span>{backgroundSyncStatus.lastError}</span>
             </div>
           ) : (
-            <div className="monitoring-log-empty">当前接口没有异常记录。</div>
+            <div className="monitoring-health-message">
+              <CheckCircle2 size={20} />
+              <div>
+                <strong>暂无异常记录</strong>
+                <span>仅在接口返回真实错误时显示红色告警。</span>
+              </div>
+            </div>
           )}
         </GlassCard>
       </section>

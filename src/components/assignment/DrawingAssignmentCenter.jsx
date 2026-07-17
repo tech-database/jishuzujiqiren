@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { ClipboardCheck, Database } from "lucide-react";
-import { PageHeader, StatusBadge } from "../design-system";
+import { CheckCircle2, Clock3, FileInput, Send, UserRoundCheck } from "lucide-react";
+import { StatusBadge } from "../design-system";
 import { PageTransition } from "../motion";
 import { buildMaterialCodeSummary } from "../../utils/materialCodeUtils";
 import AssignmentActionBar from "./AssignmentActionBar";
@@ -29,6 +29,12 @@ export default function DrawingAssignmentCenter({
   const [errors, setErrors] = useState({});
   const summary = useMemo(() => buildMaterialCodeSummary(claimForm.materialCodes), [claimForm.materialCodes]);
   const busy = claiming || completingDrawing || queryingClaims;
+  const flowSteps = [
+    { label: "输入料号", icon: FileInput, done: summary.uniqueCount > 0, active: summary.uniqueCount === 0 },
+    { label: "选择领取人", icon: UserRoundCheck, done: Boolean(claimForm.senderName.trim()), active: summary.uniqueCount > 0 && !claimForm.senderName.trim() },
+    { label: "确认提交", icon: Send, done: claimState?.ok === true && claimState.operation === "claim", active: summary.uniqueCount > 0 && Boolean(claimForm.senderName.trim()) && claimState?.ok !== true },
+    { label: "查看结果", icon: CheckCircle2, done: claimState?.ok === true, active: claimState?.ok === true },
+  ];
 
   const validateClaim = () => {
     const nextErrors = {};
@@ -73,30 +79,19 @@ export default function DrawingAssignmentCenter({
 
   return (
     <PageTransition className="assignment-center">
-      <PageHeader
-        icon={<ClipboardCheck size={24} />}
-        title="领图登记中心"
-        description="输入一个或多个料号，选择领取人，并通过现有接口提交领图登记或同步绘图完成状态。"
-        actions={(
-          <>
-            <StatusBadge tone={configReady ? "success" : "warning"}>{configReady ? "配置已就绪" : "等待配置"}</StatusBadge>
-            <StatusBadge tone={summary.uniqueCount > 0 ? "neutral" : "warning"}>
-              {summary.uniqueCount > 0 ? `${summary.uniqueCount} 个料号` : "等待料号"}
-            </StatusBadge>
-          </>
-        )}
-      />
+      <nav className="assignment-flow-strip" aria-label="领图登记步骤">
+        {flowSteps.map((step, index) => {
+          const Icon = step.icon;
+          return <span className={step.done ? "done" : step.active ? "active" : ""} key={step.label}><i>{step.done ? <CheckCircle2 size={16} /> : <Icon size={16} />}</i><small>STEP {index + 1}</small><strong>{step.label}</strong></span>;
+        })}
+      </nav>
+
+      <AssignmentResultPanel state={claimState} assignee={claimForm.senderName} materialCount={summary.uniqueCount} />
+      <AssignmentErrorPanel state={claimState} materialCount={summary.uniqueCount} assignee={claimForm.senderName} disabled={!configReady || busy} onRetry={retryCurrentOperation} onDismiss={() => updateClaimForm("dismissState", "")} />
 
       <section className="assignment-layout">
         <div className="assignment-form-column">
           <section className="assignment-form-panel">
-            <div className="assignment-section-head">
-              <Database size={20} />
-              <div>
-                <h2>登记表单</h2>
-                <p>重复料号会被标记，并沿用当前去重提交逻辑。</p>
-              </div>
-            </div>
             <MaterialCodeInput
               value={claimForm.materialCodes}
               summary={summary}
@@ -113,7 +108,6 @@ export default function DrawingAssignmentCenter({
               onChange={updateAssignee}
             />
             <AssignmentActionBar
-              claimDisabled={!configReady || busy || !summary.canSubmit || !claimForm.senderName.trim()}
               completeDisabled={!configReady || busy || !summary.canSubmit}
               queryDisabled={!configReady || busy}
               querying={queryingClaims}
@@ -123,33 +117,23 @@ export default function DrawingAssignmentCenter({
               onClear={clearClaimForm}
               onQuery={queryDrawingClaims}
               onComplete={submitComplete}
-              onClaim={submitClaim}
             />
           </section>
-
-          <AssignmentResultPanel state={claimState} />
-          <AssignmentErrorPanel
-            state={claimState}
-            materialCount={summary.uniqueCount}
-            assignee={claimForm.senderName}
-            disabled={!configReady || busy}
-            onRetry={retryCurrentOperation}
-            onDismiss={() => updateClaimForm("dismissState", "")}
-          />
         </div>
 
         <AssignmentSummary
           summary={summary}
           assignee={claimForm.senderName}
           submitting={busy}
-          onRemoveCode={removeMaterialCode}
+          disabled={!configReady || busy || !summary.canSubmit || !claimForm.senderName.trim()}
+          onSubmit={submitClaim}
         />
       </section>
 
       {claimQueryResult && (
         <section className="assignment-query-panel" aria-label="未领取查询结果">
           <header>
-            <h2>本次会话查询结果</h2>
+            <div className="assignment-step-heading compact"><span>4</span><div><h2>查看结果</h2><p>本次会话未领取图纸</p></div></div>
             <StatusBadge tone={claimQueryResult.count > 0 ? "warning" : "success"}>
               {claimQueryResult.count > 0 ? `${claimQueryResult.count} 条未领取` : "全部已领取"}
             </StatusBadge>
@@ -159,7 +143,11 @@ export default function DrawingAssignmentCenter({
               {claimQueryResult.items.map((item) => (
                 <article key={`${item.table}:${item.recordId}`}>
                   <code>{item.materialCode}</code>
-                  <span>{item.message || "未被领取"}</span>
+                  <dl>
+                    <div><dt>状态</dt><dd><Clock3 size={13} />未领取</dd></div>
+                    <div><dt>领取人</dt><dd>等待分配</dd></div>
+                    <div><dt>来源</dt><dd>{item.table === "paint" ? "油漆" : "胶板"}</dd></div>
+                  </dl>
                 </article>
               ))}
             </div>

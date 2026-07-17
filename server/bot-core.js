@@ -40,6 +40,23 @@ function readRuntimeEnvValue(key) {
   return process.env[key];
 }
 
+function readJsonRuntimeEnvValue(key, fallback = {}) {
+  const rawValue = readRuntimeEnvValue(key);
+  if (!rawValue) return fallback;
+
+  try {
+    return JSON.parse(rawValue);
+  } catch {
+    // Compatibility with values previously written as a JSON-stringified
+    // dotenv value (for example {\"id\":\"name\"}).
+    try {
+      return JSON.parse(rawValue.replace(/\\\"/g, '"'));
+    } catch {
+      return fallback;
+    }
+  }
+}
+
 export function getConfigStatus() {
   const missing = requiredConfig.filter((key) => !readRuntimeEnvValue(key));
   return {
@@ -105,16 +122,13 @@ export function ensureConfig() {
 }
 
 function readFieldMap() {
-  try {
-    return JSON.parse(readRuntimeEnvValue("FIELD_MAP_JSON") || "{}");
-  } catch {
-    return {};
-  }
+  const parsed = readJsonRuntimeEnvValue("FIELD_MAP_JSON");
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
 function readNameIdMap() {
   try {
-    const parsed = JSON.parse(readRuntimeEnvValue("NAME_ID_MAP_JSON") || "{}");
+    const parsed = readJsonRuntimeEnvValue("NAME_ID_MAP_JSON");
     if (Array.isArray(parsed)) {
       return Object.fromEntries(
         parsed
@@ -693,6 +707,7 @@ const drawingDateField = "\u65e5\u671f";
 const drawingClaimTimeField = "\u9886\u56fe\u5177\u4f53\u65f6\u95f4";
 const drawingCompleteTimeField = "\u5b8c\u6210\u56fe\u5177\u4f53\u65f6\u95f4";
 const drawingDurationField = "\u7528\u65f6";
+const drawingDurationFieldAliases = ["用时（分）", "用时(分)", "用时（分钟）", "用时(分钟)", drawingDurationField];
 const drawingOwnerAliases = {
   "\u83ab\u957f\u5cf0": "\u83ab\u957f\u950b",
 };
@@ -773,23 +788,19 @@ function bitableDateTimeValue(fieldTypes, fieldName, timestamp = Date.now()) {
   return fieldTypes.get(fieldName) === 5 ? timestamp : formatDateTime(timestamp);
 }
 
-function formatDurationText(durationMs) {
-  const totalMinutes = Math.max(0, Math.round(durationMs / 60000));
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  const parts = [];
-  if (days > 0) parts.push(`${days}\u5929`);
-  if (hours > 0) parts.push(`${hours}\u5c0f\u65f6`);
-  parts.push(`${minutes}\u5206\u949f`);
-  return parts.join("");
+export function calculateDurationMinutes(durationMs) {
+  return Math.max(0, Math.round(Number(durationMs) / 60000));
 }
 
-function durationValue(fieldTypes, durationMs) {
-  if (fieldTypes.get(drawingDurationField) === 2) {
-    return Number((Math.max(0, durationMs) / 3600000).toFixed(2));
-  }
-  return formatDurationText(durationMs);
+function resolveDrawingDurationField(fieldTypes) {
+  return drawingDurationFieldAliases.find((fieldName) => fieldTypes.has(fieldName)) ||
+    [...fieldTypes.keys()].find((fieldName) => /^用时(?:[（(].*[）)])?$/.test(String(fieldName).trim())) ||
+    null;
+}
+
+function durationValue(fieldTypes, durationField, durationMs) {
+  const minutes = calculateDurationMinutes(durationMs);
+  return fieldTypes.get(durationField) === 2 ? minutes : String(minutes);
 }
 
 function parseDateBoundary(value, endOfDay = false) {
@@ -870,6 +881,7 @@ export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {})
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  const durationField = resolveDrawingDurationField(fieldTypes);
   const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
   if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
   if (!fieldTypes.has(drawingStatusField)) throw new Error(`Field not found: ${drawingStatusField}`);
@@ -904,15 +916,13 @@ export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {})
     if (nextStatus === drawingStatuses.done && !completeTime && fieldTypes.has(drawingCompleteTimeField)) {
       fieldsToUpdate[drawingCompleteTimeField] = bitableDateTimeValue(fieldTypes, drawingCompleteTimeField, now);
     }
-    const effectiveClaimTime = claimTime || parseBitableDateValue(fieldsToUpdate[drawingClaimTimeField]);
     const effectiveCompleteTime = completeTime || parseBitableDateValue(fieldsToUpdate[drawingCompleteTimeField]);
-    if (
-      effectiveClaimTime &&
-      effectiveCompleteTime &&
-      fieldTypes.has(drawingDurationField) &&
-      !bitableValueToText(record.fields?.[drawingDurationField])
-    ) {
-      fieldsToUpdate[drawingDurationField] = durationValue(fieldTypes, effectiveCompleteTime - effectiveClaimTime);
+    if (claimTime && effectiveCompleteTime && durationField) {
+      const nextDuration = durationValue(fieldTypes, durationField, effectiveCompleteTime - claimTime);
+      const currentDuration = bitableValueToText(record.fields?.[durationField]);
+      if (currentDuration !== String(nextDuration)) {
+        fieldsToUpdate[durationField] = nextDuration;
+      }
     }
 
     if (Object.keys(fieldsToUpdate).length > 0) {
@@ -928,6 +938,51 @@ export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {})
   }
 
   return { table: tableConfig.key, summary, items };
+}
+
+export async function recalculateDrawingDurations({ startDate, endDate, tableKey } = {}) {
+  const token = await getTenantAccessToken();
+  const tableConfig = getBitableConfig(tableKey);
+  const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  const durationField = resolveDrawingDurationField(fieldTypes);
+  const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
+
+  if (!fieldTypes.has(drawingClaimTimeField)) throw new Error(`Field not found: ${drawingClaimTimeField}`);
+  if (!fieldTypes.has(drawingCompleteTimeField)) throw new Error(`Field not found: ${drawingCompleteTimeField}`);
+  if (!durationField) throw new Error(`Field not found: ${drawingDurationField}`);
+
+  const summary = {
+    scanned: records.length,
+    eligible: 0,
+    updated: 0,
+    missingTime: 0,
+    invalidTime: 0,
+  };
+
+  for (const record of records) {
+    const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
+    const completeTime = parseBitableDateValue(record.fields?.[drawingCompleteTimeField]);
+    if (!claimTime || !completeTime) {
+      summary.missingTime += 1;
+      continue;
+    }
+    if (completeTime < claimTime) {
+      summary.invalidTime += 1;
+      continue;
+    }
+
+    summary.eligible += 1;
+    const nextDuration = durationValue(fieldTypes, durationField, completeTime - claimTime);
+    const currentDuration = bitableValueToText(record.fields?.[durationField]);
+    if (currentDuration === String(nextDuration)) continue;
+
+    await updateBitableRecord(token, tableConfig, record.record_id, {
+      [durationField]: nextDuration,
+    });
+    summary.updated += 1;
+  }
+
+  return { table: tableConfig.key, summary };
 }
 
 export async function queryUnclaimedDrawings({ tableKey } = {}) {
@@ -1142,12 +1197,13 @@ export async function completeDrawings({ materialCodes, startDate, endDate, tabl
     throw new Error("\u7f3a\u5c11\u6599\u53f7\uff0c\u8bf7\u8f93\u5165\u9700\u8981\u6807\u8bb0\u5b8c\u6210\u7684\u6599\u53f7");
   }
 
-  const result = [];
   const foundCodes = new Set();
+  const matchedItems = [];
   const token = await getTenantAccessToken();
   for (const key of drawingTableKeys(tableKey)) {
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
+    const durationField = resolveDrawingDurationField(fieldTypes);
     const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
     if (!fieldTypes.has(drawingStatusField)) throw new Error(`Field not found: ${drawingStatusField}`);
 
@@ -1157,25 +1213,30 @@ export async function completeDrawings({ materialCodes, startDate, endDate, tabl
     for (const item of matchedRecords) {
       if (item.records.length === 0) continue;
       foundCodes.add(item.materialCode);
-      for (const record of item.records) {
-        const now = Date.now();
-        const fields = {
-          [drawingStatusField]: drawingStatuses.done,
-        };
-        if (fieldTypes.has(drawingCompleteTimeField)) {
-          fields[drawingCompleteTimeField] = bitableDateTimeValue(fieldTypes, drawingCompleteTimeField, now);
-        }
-        const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
-        if (claimTime && fieldTypes.has(drawingDurationField)) {
-          fields[drawingDurationField] = durationValue(fieldTypes, now - claimTime);
-        }
-        await updateBitableRecord(token, tableConfig, record.record_id, fields);
-        result.push({ table: tableConfig.key, recordId: record.record_id, materialCode: item.materialCode });
-      }
+      matchedItems.push({ ...item, fieldTypes, durationField, tableConfig });
     }
   }
   const missing = codes.filter((code) => !foundCodes.has(code));
   if (missing.length > 0) throw new Error(`Material code not found: ${missing.join(", ")}`);
+
+  const result = [];
+  for (const item of matchedItems) {
+    for (const record of item.records) {
+      const now = Date.now();
+      const fields = {
+        [drawingStatusField]: drawingStatuses.done,
+      };
+      if (item.fieldTypes.has(drawingCompleteTimeField)) {
+        fields[drawingCompleteTimeField] = bitableDateTimeValue(item.fieldTypes, drawingCompleteTimeField, now);
+      }
+      const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
+      if (claimTime && item.durationField) {
+        fields[item.durationField] = durationValue(item.fieldTypes, item.durationField, now - claimTime);
+      }
+      await updateBitableRecord(token, item.tableConfig, record.record_id, fields);
+      result.push({ table: item.tableConfig.key, recordId: record.record_id, materialCode: item.materialCode });
+    }
+  }
   return result;
 }
 

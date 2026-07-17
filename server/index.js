@@ -4,6 +4,7 @@ import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
+import { parse as parseDotenv } from "dotenv";
 import {
   claimDrawingOwners,
   completeDrawings,
@@ -18,6 +19,7 @@ import {
   queryDrawingClaimStatus,
   queryDrawingOwnerStats,
   queryUnclaimedDrawings,
+  recalculateDrawingDurations,
   syncDrawingStatuses,
   writeFromText,
 } from "./bot-core.js";
@@ -127,6 +129,13 @@ async function checkBitableTable(token, tableKey) {
 }
 
 async function readWebsocketHealth() {
+  if (process.env.FEISHU_LONG_CONNECTION_ENABLED === "false") {
+    return {
+      ok: true,
+      message: "飞书长连接由服务器托管",
+    };
+  }
+
   try {
     const status = JSON.parse(await readFile(websocketStatusPath, "utf8"));
     const updatedAt = new Date(status.updatedAt).getTime();
@@ -233,8 +242,17 @@ function applyRuntimeConfig(config) {
 
 function serializeEnv(entries) {
   return `${Object.entries(entries)
-    .map(([key, value]) => `${key}=${String(value).replace(/\r?\n/g, "\\n")}`)
+    .map(([key, value]) => `${key}='${String(value).replace(/\r?\n/g, "\\n").replace(/'/g, "\\'")}'`)
     .join("\n")}\n`;
+}
+
+async function readEnvEntries() {
+  try {
+    return parseDotenv(await readFile(envPath, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
 }
 
 function assertConfigWritePassword(password) {
@@ -291,7 +309,10 @@ async function runStatusSync(reason, range = {}, { skipIfRunning = false, suppre
 async function runBackgroundStatusSync(reason = "timer") {
   if (statusSyncRunning || !getConfigStatus().ready) return null;
   const results = [];
-  for (const tableKey of ["board", "paint"]) {
+  const configuredTableKeys = Object.entries(getConfigStatus().tables || {})
+    .filter(([, tableStatus]) => tableStatus.ready)
+    .map(([tableKey]) => tableKey);
+  for (const tableKey of configuredTableKeys) {
     const range = { ...defaultStatusDateRange(), tableKey };
     statusSyncInfo.range = range;
     statusSyncInfo.lastCheckedAt = new Date().toISOString();
@@ -337,7 +358,8 @@ app.post("/api/config", async (req, res) => {
   try {
     assertConfigWritePassword(req.body?.adminPassword);
     const entries = applyRuntimeConfig(req.body || {});
-    await writeFile(envPath, serializeEnv(entries), "utf8");
+    const existingEntries = await readEnvEntries();
+    await writeFile(envPath, serializeEnv({ ...existingEntries, ...entries }), "utf8");
     res.json({ ok: true, config: publicConfig(), status: getConfigStatus() });
   } catch (error) {
     res.status(error.statusCode || 400).json({ ok: false, error: error.message });
@@ -508,6 +530,19 @@ app.post("/api/sync-drawing-statuses", async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (error) {
     res.status(error.statusCode || 400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/recalculate-drawing-durations", async (req, res) => {
+  try {
+    const result = await recalculateDrawingDurations({
+      startDate: req.body?.startDate,
+      endDate: req.body?.endDate,
+      tableKey: req.body?.tableKey,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
   }
 });
 
