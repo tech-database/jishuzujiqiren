@@ -68,26 +68,27 @@ export function buildStatusDistribution(summary) {
 
 export function buildMetricCards(normalized, backgroundSyncStatus) {
   const summary = normalized.summary;
+  const tableLabel = normalized.table === "paint" ? "油漆表" : "胶板表";
   return [
     {
       key: "total",
       label: "检测任务总数",
       value: summary.total,
-      helper: "当前日期范围",
+      helper: `${tableLabel}当前日期范围`,
       tone: "neutral",
     },
     {
       key: "drawing",
       label: "处理中",
       value: summary.drawing,
-      helper: "绘图中任务",
+      helper: `${tableLabel}绘图中任务`,
       tone: "warning",
     },
     {
       key: "done",
       label: "已完成",
       value: summary.done,
-      helper: "完成任务",
+      helper: `${tableLabel}完成任务`,
       tone: "success",
     },
     {

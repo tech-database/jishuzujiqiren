@@ -708,6 +708,8 @@ const drawingClaimTimeField = "\u9886\u56fe\u5177\u4f53\u65f6\u95f4";
 const drawingCompleteTimeField = "\u5b8c\u6210\u56fe\u5177\u4f53\u65f6\u95f4";
 const drawingDurationField = "\u7528\u65f6";
 const drawingDurationFieldAliases = ["用时（分）", "用时(分)", "用时（分钟）", "用时(分钟)", drawingDurationField];
+const drawingScoreField = "分值";
+const drawingRegionField = "区域";
 const drawingOwnerAliases = {
   "\u83ab\u957f\u5cf0": "\u83ab\u957f\u950b",
 };
@@ -801,6 +803,19 @@ function resolveDrawingDurationField(fieldTypes) {
 function durationValue(fieldTypes, durationField, durationMs) {
   const minutes = calculateDurationMinutes(durationMs);
   return fieldTypes.get(durationField) === 2 ? minutes : String(minutes);
+}
+
+function bitableValueToNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const nestedValue = value.value ?? value.text ?? value.name;
+    if (nestedValue !== undefined && nestedValue !== value) return bitableValueToNumber(nestedValue);
+  }
+  const text = bitableValueToText(value).replace(/,/g, "").trim();
+  if (!text) return null;
+  const numericMatch = text.match(/-?\d+(?:\.\d+)?/);
+  const number = Number(numericMatch?.[0]);
+  return Number.isFinite(number) ? number : null;
 }
 
 function parseDateBoundary(value, endOfDay = false) {
@@ -1091,6 +1106,146 @@ export async function queryDrawingOwnerStats({ tableKey } = {}) {
       todayCompleted: items.reduce((sum, item) => sum + item.todayCompleted, 0),
     },
     items,
+  };
+}
+
+export async function queryHomeDashboardTable({ startDate, endDate, tableKey } = {}) {
+  const token = await getTenantAccessToken();
+  const tableConfig = getBitableConfig(tableKey);
+  const records = filterRecordsByDateRange(
+    await listBitableRecords(token, tableConfig),
+    startDate,
+    endDate,
+  );
+  const summary = { total: records.length, unclaimed: 0, drawing: 0, done: 0 };
+  const events = [];
+
+  for (const record of records) {
+    const fields = record.fields || {};
+    const status = detectDrawingStatus(fields);
+    const owner = bitableValueToText(fields[drawingOwnerField]);
+    const materialCode = getDrawingMaterialCode(fields) || "未填料号";
+    const claimTime = parseBitableDateValue(fields[drawingClaimTimeField]);
+    const completeTime = parseBitableDateValue(fields[drawingCompleteTimeField]);
+
+    if (status === drawingStatuses.unclaimed) summary.unclaimed += 1;
+    else if (status === drawingStatuses.drawing) summary.drawing += 1;
+    else if (status === drawingStatuses.done) summary.done += 1;
+
+    const eventTime = completeTime || claimTime;
+    if (eventTime) {
+      events.push({
+        id: `${tableConfig.key}:${record.record_id}:${eventTime}`,
+        time: new Date(eventTime).toISOString(),
+        type: completeTime ? "完成" : "接图",
+        source: tableConfig.label,
+        content: completeTime
+          ? `${owner || "绘图人员"}完成 ${materialCode}`
+          : `${owner || "绘图人员"}领取 ${materialCode}`,
+        status: completeTime ? "成功" : "正常",
+      });
+    }
+  }
+
+  events.sort((left, right) => Date.parse(right.time) - Date.parse(left.time));
+  return {
+    table: tableConfig.key,
+    tableLabel: tableConfig.label,
+    range: { startDate: startDate || "", endDate: endDate || "" },
+    summary,
+    events: events.slice(0, 12),
+  };
+}
+
+export async function queryDrawingAnalytics({ startDate, endDate, tableKey } = {}) {
+  const token = await getTenantAccessToken();
+  const tableConfig = getBitableConfig(tableKey);
+  const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  const durationField = resolveDrawingDurationField(fieldTypes);
+  const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
+
+  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
+
+  const owners = new Map();
+  const regions = new Map();
+  let totalScore = 0;
+  let scoredRecords = 0;
+  let totalDuration = 0;
+  let durationRecords = 0;
+
+  for (const record of records) {
+    const fields = record.fields || {};
+    const owner = bitableValueToText(fields[drawingOwnerField]) || "未分配";
+    const region = bitableValueToText(fields[drawingRegionField]) || "未填写";
+    const score = bitableValueToNumber(fields[drawingScoreField]);
+    const duration = durationField ? bitableValueToNumber(fields[durationField]) : null;
+
+    if (!owners.has(owner)) {
+      owners.set(owner, {
+        name: owner,
+        count: 0,
+        score: 0,
+        scoredRecords: 0,
+        durationTotal: 0,
+        durationRecords: 0,
+      });
+    }
+    const ownerItem = owners.get(owner);
+    ownerItem.count += 1;
+    if (score !== null) {
+      ownerItem.score += score;
+      ownerItem.scoredRecords += 1;
+      totalScore += score;
+      scoredRecords += 1;
+    }
+    if (duration !== null) {
+      ownerItem.durationTotal += duration;
+      ownerItem.durationRecords += 1;
+      totalDuration += duration;
+      durationRecords += 1;
+    }
+
+    regions.set(region, (regions.get(region) || 0) + 1);
+  }
+
+  const ownerItems = [...owners.values()]
+    .map((item) => ({
+      name: item.name,
+      count: item.count,
+      score: Math.round(item.score * 10) / 10,
+      scoredRecords: item.scoredRecords,
+      averageDuration:
+        item.durationRecords > 0 ? Math.round((item.durationTotal / item.durationRecords) * 10) / 10 : null,
+      durationRecords: item.durationRecords,
+    }))
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "zh-CN"));
+
+  const regionItems = [...regions.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "zh-CN"));
+
+  return {
+    table: tableConfig.key,
+    tableLabel: tableConfig.label,
+    range: { startDate: startDate || "", endDate: endDate || "" },
+    checkedAt: new Date().toISOString(),
+    summary: {
+      total: records.length,
+      owners: ownerItems.filter((item) => item.name !== "未分配").length,
+      regions: regionItems.filter((item) => item.name !== "未填写").length,
+      totalScore: Math.round(totalScore * 10) / 10,
+      scoredRecords,
+      averageDuration: durationRecords > 0 ? Math.round((totalDuration / durationRecords) * 10) / 10 : null,
+      durationRecords,
+    },
+    owners: ownerItems,
+    regions: regionItems,
+    fields: {
+      score: fieldTypes.has(drawingScoreField),
+      region: fieldTypes.has(drawingRegionField),
+      duration: Boolean(durationField),
+      durationField,
+    },
   };
 }
 

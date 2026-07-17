@@ -4,12 +4,16 @@ import {
   Activity,
   Bot,
   CheckCircle2,
+  ChartNoAxesCombined,
   ChevronLeft,
   ClipboardCheck,
   Database,
   FileSpreadsheet,
   FileUp,
+  House,
   Images,
+  LogIn,
+  LogOut,
   MessageSquareText,
   Menu,
   RefreshCw,
@@ -24,6 +28,7 @@ import {
   PageTransition,
 } from "./components/motion";
 import { ErrorBoundary } from "./components/system/ErrorBoundary.jsx";
+import { AdminAccessGate } from "./components/system/AdminAccessGate.jsx";
 import { getImportFileKey, validateImportFiles } from "./utils/importFileUtils";
 import { aggregateImportResults, buildImportSuccessText, sanitizeImportError } from "./utils/importResultUtils";
 import { parseMaterialCodes as parseMaterialCodeSummary, removeMaterialCodeAtIndex } from "./utils/materialCodeUtils";
@@ -31,6 +36,9 @@ import { sanitizeAssignmentError } from "./utils/assignmentResultUtils";
 import "./styles.css";
 import "./styles/cockpit.css";
 import "./styles/saas-light.css";
+import "./styles/analytics.css";
+import "./styles/home-dashboard.css";
+import "./styles/admin-access.css";
 
 const MappingStudio = React.lazy(() => import("./components/field-mapping/MappingStudio.jsx"));
 const MonitoringCenter = React.lazy(() => import("./components/monitoring/MonitoringCenter.jsx"));
@@ -40,6 +48,8 @@ const PeopleMappingCenter = React.lazy(() => import("./components/people/PeopleM
 const DrawingOperationsCenter = React.lazy(() => import("./components/drawing/DrawingOperationsCenter.jsx"));
 const DataImportCenter = React.lazy(() => import("./components/import-write/DataImportCenter.jsx"));
 const DrawingAssignmentCenter = React.lazy(() => import("./components/assignment/DrawingAssignmentCenter.jsx"));
+const DataAnalyticsCenter = React.lazy(() => import("./components/analytics/DataAnalyticsCenter.jsx"));
+const HomeDashboard = React.lazy(() => import("./components/home/HomeDashboard.jsx"));
 
 const emptyConfig = {
   appId: "",
@@ -57,6 +67,27 @@ const tableOptions = [
   { key: "board", label: "胶板" },
   { key: "paint", label: "油漆" },
 ];
+
+const tabRoutes = {
+  home: "/home",
+  connection: "/connection",
+  mapping: "/mapping",
+  commands: "/commands",
+  people: "/people",
+  status: "/status",
+  owners: "/owners",
+  analytics: "/analytics",
+  upload: "/upload",
+  drawing: "/drawing",
+};
+
+const adminOnlyTabs = new Set(["connection", "people"]);
+const adminTabLabels = { connection: "连接配置", people: "人员映射" };
+
+function tabFromPath(pathname = window.location.pathname) {
+  const entry = Object.entries(tabRoutes).find(([, path]) => path === pathname);
+  return entry?.[0] || "home";
+}
 
 function invertFieldMap(fieldMap) {
   const result = {};
@@ -189,6 +220,7 @@ function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult,
     commands: "飞书口令",
     people: "人员映射",
     status: "状态检测",
+    analytics: "数据看板",
     owners: "绘图人动态",
     upload: "数据导入",
     drawing: "领图登记",
@@ -330,6 +362,33 @@ const feishuCommands = [
   },
 ];
 
+const statusTableKeys = ["board", "paint"];
+
+function buildStatusCacheKey(tableKey, range) {
+  return `${tableKey}:${range.startDate || ""}:${range.endDate || ""}`;
+}
+
+function combineStatusResults(resultsByKey, range) {
+  const tableResults = statusTableKeys.map((tableKey) => resultsByKey[buildStatusCacheKey(tableKey, range)]);
+  if (tableResults.some((result) => !result?.summary)) return null;
+
+  const summary = tableResults.reduce(
+    (combined, result) => ({
+      total: combined.total + Number(result.summary.total || 0),
+      unclaimed: combined.unclaimed + Number(result.summary.unclaimed || 0),
+      drawing: combined.drawing + Number(result.summary.drawing || 0),
+      done: combined.done + Number(result.summary.done || 0),
+      updated: combined.updated + Number(result.summary.updated || 0),
+    }),
+    { total: 0, unclaimed: 0, drawing: 0, done: 0, updated: 0 },
+  );
+  const items = tableResults.flatMap((result, index) => {
+    const tableKey = result.table || statusTableKeys[index];
+    return (result.items || []).map((item) => ({ ...item, table: tableKey, cacheId: `${tableKey}:${item.recordId}` }));
+  });
+  return { table: "all", tables: statusTableKeys, summary, items };
+}
+
 function App() {
   const [status, setStatus] = useState(null);
   const [config, setConfig] = useState(emptyConfig);
@@ -342,7 +401,18 @@ function App() {
   const [bitableFields, setBitableFields] = useState([]);
   const [fieldMappings, setFieldMappings] = useState({});
   const [nameIdRows, setNameIdRows] = useState([{ id: "", name: "" }]);
-  const [activeTab, setActiveTab] = useState("connection");
+  const [activeTab, setActiveTab] = useState(() => {
+    const requestedTab = tabFromPath();
+    return adminOnlyTabs.has(requestedTab) ? "home" : requestedTab;
+  });
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
+  const [adminSessionLoading, setAdminSessionLoading] = useState(true);
+  const [adminTarget, setAdminTarget] = useState(() => {
+    const requestedTab = tabFromPath();
+    return adminOnlyTabs.has(requestedTab) ? requestedTab : null;
+  });
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
+  const [adminError, setAdminError] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [targetTable, setTargetTable] = useState("board");
@@ -360,9 +430,12 @@ function App() {
   const [queryingClaims, setQueryingClaims] = useState(false);
   const [claimState, setClaimState] = useState(null);
   const [claimQueryResult, setClaimQueryResult] = useState(null);
-  const [statusSyncing, setStatusSyncing] = useState(false);
+  const [statusActionRunning, setStatusActionRunning] = useState(false);
   const [statusState, setStatusState] = useState(null);
-  const [statusResult, setStatusResult] = useState(null);
+  const [statusResultsByKey, setStatusResultsByKey] = useState({});
+  const statusResultsRef = useRef({});
+  const statusRequestsRef = useRef(new Map());
+  const [statusPendingKeys, setStatusPendingKeys] = useState({});
   const [backgroundSyncStatus, setBackgroundSyncStatus] = useState(null);
   const [ownerStats, setOwnerStats] = useState(null);
   const [ownerStatsLoading, setOwnerStatsLoading] = useState(false);
@@ -380,7 +453,33 @@ function App() {
     };
   });
 
-  async function loadConfig() {
+  function navigateTab(tab, { replace = false, bypassAdmin = false } = {}) {
+    const path = tabRoutes[tab] || tabRoutes.home;
+    if (adminOnlyTabs.has(tab) && !adminAuthenticated && !bypassAdmin) {
+      window.history[replace ? "replaceState" : "pushState"]({ tab }, "", path);
+      setAdminTarget(tab);
+      setAdminError("");
+      setMobileNavigationOpen(false);
+      return;
+    }
+    window.history[replace ? "replaceState" : "pushState"]({ tab }, "", path);
+    setActiveTab(tab);
+    setAdminTarget(null);
+    setMobileNavigationOpen(false);
+  }
+  const activeStatusCacheKey = buildStatusCacheKey(targetTable, statusDateRange);
+  const statusResult = statusResultsByKey[activeStatusCacheKey] || null;
+  const aggregateStatusResult = combineStatusResults(statusResultsByKey, statusDateRange);
+  const statusSyncing =
+    statusActionRunning ||
+    statusTableKeys.some((tableKey) => statusPendingKeys[buildStatusCacheKey(tableKey, statusDateRange)]);
+
+  function storeStatusResult(cacheKey, result) {
+    statusResultsRef.current = { ...statusResultsRef.current, [cacheKey]: result };
+    setStatusResultsByKey(statusResultsRef.current);
+  }
+
+  async function loadConfig({ adminAccess = adminAuthenticated } = {}) {
     setConfigLoading(true);
     try {
       const response = await fetch("/api/config");
@@ -390,8 +489,11 @@ function App() {
         const loadedConfig = { ...emptyConfig, ...data.config, appSecret: "" };
         setConfig(loadedConfig);
         setConfigBaseline(loadedConfig);
-        setNameIdRows(mapToNameIdRows(data.config?.nameIdMap || data.status?.nameIdMap));
-        if (data.status?.ready) {
+        const loadedNameIdMap = Object.keys(data.config?.nameIdMap || {}).length > 0
+          ? data.config.nameIdMap
+          : data.status?.nameIdMap;
+        setNameIdRows(mapToNameIdRows(loadedNameIdMap));
+        if (data.status?.ready && adminAccess) {
           await autoFetchFields(data.status);
         }
       }
@@ -451,10 +553,102 @@ function App() {
     }
   }
 
+  async function submitAdminAccess(password) {
+    setAdminSubmitting(true);
+    setAdminError("");
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.authenticated) {
+        throw new Error(result.error || "管理员验证失败");
+      }
+      const target = adminTarget || "home";
+      setAdminAuthenticated(true);
+      setAdminTarget(null);
+      navigateTab(target, { replace: true, bypassAdmin: true });
+      await loadConfig({ adminAccess: true });
+    } catch (error) {
+      setAdminError(error.message || "管理员验证失败");
+    } finally {
+      setAdminSubmitting(false);
+    }
+  }
+
+  function cancelAdminAccess() {
+    setAdminTarget(null);
+    setAdminError("");
+    navigateTab("home", { replace: true, bypassAdmin: true });
+  }
+
+  async function logoutAdminAccess() {
+    try {
+      await fetch("/api/admin/logout", { method: "POST" });
+    } finally {
+      setAdminAuthenticated(false);
+      setAdminTarget(null);
+      setAdminError("");
+      setConfig(emptyConfig);
+      setConfigBaseline(emptyConfig);
+      setBitableFields([]);
+      setFieldMappings({});
+      if (adminOnlyTabs.has(activeTab)) {
+        navigateTab("home", { replace: true, bypassAdmin: true });
+      }
+      await loadConfig({ adminAccess: false });
+    }
+  }
+
   useEffect(() => {
     loadConfig();
     loadHealthStatus();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function restoreAdminSession() {
+      try {
+        const response = await fetch("/api/admin/session");
+        const result = await response.json();
+        if (cancelled) return;
+        const authenticated = Boolean(response.ok && result.authenticated);
+        setAdminAuthenticated(authenticated);
+        if (authenticated) {
+          const requestedTab = adminTarget || tabFromPath();
+          if (adminOnlyTabs.has(requestedTab)) {
+            navigateTab(requestedTab, { replace: true, bypassAdmin: true });
+          }
+          await loadConfig({ adminAccess: true });
+        }
+      } catch {
+        if (!cancelled) setAdminAuthenticated(false);
+      } finally {
+        if (!cancelled) setAdminSessionLoading(false);
+      }
+    }
+    restoreAdminSession();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (window.location.pathname === "/") navigateTab("home", { replace: true, bypassAdmin: true });
+    const handlePopState = () => {
+      const requestedTab = tabFromPath();
+      if (adminOnlyTabs.has(requestedTab) && !adminAuthenticated) {
+        setActiveTab("home");
+        setAdminTarget(requestedTab);
+        setAdminError("");
+        return;
+      }
+      setActiveTab(requestedTab);
+      setAdminTarget(null);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [adminAuthenticated]);
 
   useEffect(() => {
     const timer = window.setInterval(loadHealthStatus, 30000);
@@ -776,34 +970,72 @@ function App() {
     }
   }
 
-  async function syncDrawingStatus({ silent = false } = {}) {
-    if (!silent) setStatusState(null);
-    setStatusSyncing(true);
-    try {
+  async function fetchTableStatus(tableKey, range, { force = false } = {}) {
+    const cacheKey = buildStatusCacheKey(tableKey, range);
+    if (!force && statusResultsRef.current[cacheKey]) return statusResultsRef.current[cacheKey];
+    if (statusRequestsRef.current.has(cacheKey)) return statusRequestsRef.current.get(cacheKey);
+
+    setStatusPendingKeys((current) => ({ ...current, [cacheKey]: true }));
+    const request = (async () => {
       const response = await fetch("/api/sync-drawing-statuses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...statusDateRange, tableKey: targetTable }),
+        body: JSON.stringify({ ...range, tableKey }),
       });
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
-      setStatusResult(data);
-      setStatusState({
-        ok: true,
-        text: `检测完成：未领取 ${data.summary.unclaimed} 个，绘图中 ${data.summary.drawing} 个，绘图完成 ${data.summary.done} 个`,
+      const result = {
+        ...data,
+        source: "direct",
+        refreshedAt: new Date().toISOString(),
+      };
+      storeStatusResult(cacheKey, result);
+      return result;
+    })();
+
+    statusRequestsRef.current.set(cacheKey, request);
+    try {
+      return await request;
+    } finally {
+      statusRequestsRef.current.delete(cacheKey);
+      setStatusPendingKeys((current) => {
+        const next = { ...current };
+        delete next[cacheKey];
+        return next;
       });
+    }
+  }
+
+  async function syncDrawingStatus({ silent = false, force = true } = {}) {
+    const range = { ...statusDateRange };
+    if (!silent) {
+      setStatusState(null);
+      setStatusActionRunning(true);
+    }
+    try {
+      await Promise.all(statusTableKeys.map((tableKey) => fetchTableStatus(tableKey, range, { force })));
+      const combined = combineStatusResults(statusResultsRef.current, range);
+      if (combined?.summary) {
+        setStatusState({
+          ok: true,
+          text: `两表检测完成：未领取 ${combined.summary.unclaimed} 个，绘图中 ${combined.summary.drawing} 个，绘图完成 ${combined.summary.done} 个`,
+        });
+      }
+      return combined;
     } catch (error) {
       if (!(silent && String(error.message || "").includes("状态检测正在进行"))) {
         setStatusState({ ok: false, text: error.message });
       }
+      return null;
     } finally {
-      setStatusSyncing(false);
+      if (!silent) setStatusActionRunning(false);
     }
   }
 
+
   async function recalculateDrawingDurations() {
     setStatusState(null);
-    setStatusSyncing(true);
+    setStatusActionRunning(true);
     try {
       const response = await fetch("/api/recalculate-drawing-durations", {
         method: "POST",
@@ -816,10 +1048,11 @@ function App() {
         ok: true,
         text: `用时重算完成：检查 ${data.summary.scanned} 条，可计算 ${data.summary.eligible} 条，更新 ${data.summary.updated} 条，缺少时间 ${data.summary.missingTime} 条`,
       });
+      await fetchTableStatus(targetTable, { ...statusDateRange }, { force: true });
     } catch (error) {
       setStatusState({ ok: false, text: error.message });
     } finally {
-      setStatusSyncing(false);
+      setStatusActionRunning(false);
     }
   }
 
@@ -827,7 +1060,31 @@ function App() {
     try {
       const response = await fetch("/api/background-status-sync");
       const data = await response.json();
-      if (data.ok) setBackgroundSyncStatus(data.status);
+      if (data.ok) {
+        setBackgroundSyncStatus(data.status);
+        const cachedResults = {};
+        for (const [tableKey, tableStatus] of Object.entries(data.status?.tables || {})) {
+          if (!tableStatus?.lastSummary || !tableStatus?.range) continue;
+          const cacheKey = buildStatusCacheKey(tableKey, tableStatus.range);
+          const existing = statusResultsRef.current[cacheKey];
+          const refreshedAt = tableStatus.lastFinishedAt || tableStatus.lastCheckedAt || "";
+          if (existing?.refreshedAt && refreshedAt && Date.parse(existing.refreshedAt) >= Date.parse(refreshedAt)) {
+            continue;
+          }
+          cachedResults[cacheKey] = {
+            table: tableKey,
+            summary: tableStatus.lastSummary,
+            items: existing?.items || [],
+            source: "background",
+            refreshedAt,
+          };
+        }
+        if (Object.keys(cachedResults).length > 0) {
+          const nextResults = { ...statusResultsRef.current, ...cachedResults };
+          statusResultsRef.current = nextResults;
+          setStatusResultsByKey(nextResults);
+        }
+      }
     } catch {
       setBackgroundSyncStatus(null);
     }
@@ -864,10 +1121,9 @@ function App() {
 
   useEffect(() => {
     if (activeTab !== "status" || !configReady) return undefined;
-    syncDrawingStatus({ silent: true });
-    loadBackgroundSyncStatus();
+    syncDrawingStatus({ silent: true, force: false });
     return undefined;
-  }, [activeTab, configReady, statusDateRange.startDate, statusDateRange.endDate, targetTable]);
+  }, [activeTab, configReady, statusDateRange.startDate, statusDateRange.endDate]);
 
   useEffect(() => {
     if (activeTab !== "status") return undefined;
@@ -886,7 +1142,7 @@ function App() {
   return (
     <>
       <LightFallBackground />
-      <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavigationOpen ? "mobile-nav-open" : ""}`}>
+      <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavigationOpen ? "mobile-nav-open" : ""} ${activeTab === "home" ? "home-active" : ""}`}>
       <aside className="app-sidebar" aria-label="主导航">
         <div className="sidebar-brand">
           <span className="sidebar-brand-mark" aria-hidden="true"><Bot size={30} /></span>
@@ -898,16 +1154,26 @@ function App() {
 
         <nav className="tab-bar" aria-label="功能菜单">
           <button
-            className={`tab-button ${activeTab === "connection" ? "active" : ""}`}
-            onClick={() => { setActiveTab("connection"); setMobileNavigationOpen(false); }}
-            title="连接配置"
+            className={`tab-button ${activeTab === "home" ? "active" : ""}`}
+            onClick={() => navigateTab("home")}
+            title="首页"
           >
-            <Settings2 size={20} />
-            <span className="tab-label">连接配置</span>
+            <House size={20} />
+            <span className="tab-label">首页</span>
           </button>
+          {adminAuthenticated && (
+            <button
+              className={`tab-button ${activeTab === "connection" ? "active" : ""}`}
+              onClick={() => navigateTab("connection")}
+              title="连接配置"
+            >
+              <Settings2 size={20} />
+              <span className="tab-label">连接配置</span>
+            </button>
+          )}
           <button
             className={`tab-button ${activeTab === "mapping" ? "active" : ""}`}
-            onClick={() => { setActiveTab("mapping"); setMobileNavigationOpen(false); }}
+            onClick={() => navigateTab("mapping")}
             title="字段映射"
           >
             <Database size={20} />
@@ -916,23 +1182,25 @@ function App() {
           </button>
           <button
             className={`tab-button ${activeTab === "commands" ? "active" : ""}`}
-            onClick={() => { setActiveTab("commands"); setMobileNavigationOpen(false); }}
+            onClick={() => navigateTab("commands")}
             title="飞书口令"
           >
             <MessageSquareText size={20} />
             <span className="tab-label">飞书口令</span>
           </button>
-          <button
-            className={`tab-button ${activeTab === "people" ? "active" : ""}`}
-            onClick={() => { setActiveTab("people"); setMobileNavigationOpen(false); }}
-            title="人员映射"
-          >
-            <UsersRound size={20} />
-            <span className="tab-label">人员映射</span>
-          </button>
+          {adminAuthenticated && (
+            <button
+              className={`tab-button ${activeTab === "people" ? "active" : ""}`}
+              onClick={() => navigateTab("people")}
+              title="人员映射"
+            >
+              <UsersRound size={20} />
+              <span className="tab-label">人员映射</span>
+            </button>
+          )}
           <button
             className={`tab-button ${activeTab === "status" ? "active" : ""}`}
-            onClick={() => { setActiveTab("status"); setMobileNavigationOpen(false); }}
+            onClick={() => navigateTab("status")}
             title="状态检测"
           >
             <Activity size={20} />
@@ -940,15 +1208,23 @@ function App() {
           </button>
           <button
             className={`tab-button ${activeTab === "owners" ? "active" : ""}`}
-            onClick={() => { setActiveTab("owners"); setMobileNavigationOpen(false); }}
+            onClick={() => navigateTab("owners")}
             title="绘图人动态"
           >
             <UsersRound size={20} />
             <span className="tab-label">绘图人动态</span>
           </button>
           <button
+            className={`tab-button ${activeTab === "analytics" ? "active" : ""}`}
+            onClick={() => navigateTab("analytics")}
+            title="数据看板"
+          >
+            <ChartNoAxesCombined size={20} />
+            <span className="tab-label">数据看板</span>
+          </button>
+          <button
             className={`tab-button ${activeTab === "upload" ? "active" : ""}`}
-            onClick={() => { setActiveTab("upload"); setMobileNavigationOpen(false); }}
+            onClick={() => navigateTab("upload")}
             title="新增"
           >
             <FileUp size={20} />
@@ -956,7 +1232,7 @@ function App() {
           </button>
           <button
             className={`tab-button ${activeTab === "drawing" ? "active" : ""}`}
-            onClick={() => { setActiveTab("drawing"); setMobileNavigationOpen(false); }}
+            onClick={() => navigateTab("drawing")}
             title="领图"
           >
             <Images size={20} />
@@ -972,6 +1248,25 @@ function App() {
           </span>
           <span className={`sidebar-system-dot ${configReady ? "online" : "standby"}`} />
         </div>
+
+        {!adminSessionLoading && !adminAuthenticated && (
+          <button
+            className="admin-login-button"
+            type="button"
+            onClick={() => navigateTab("connection")}
+            title="管理员登录"
+          >
+            <LogIn size={16} />
+            <span>管理员登录</span>
+          </button>
+        )}
+
+        {adminAuthenticated && (
+          <button className="admin-logout-button" type="button" onClick={logoutAdminAccess} title="退出管理模式">
+            <LogOut size={16} />
+            <span>退出管理模式</span>
+          </button>
+        )}
 
         <button
           className="sidebar-collapse-button"
@@ -1017,7 +1312,7 @@ function App() {
         activeTab={activeTab}
         configReady={configReady}
         healthStatus={healthStatus}
-        statusResult={statusResult}
+        statusResult={aggregateStatusResult}
         ownerStats={ownerStats}
         uploadState={uploadState}
         uploadFiles={uploadFiles}
@@ -1025,7 +1320,13 @@ function App() {
 
       <ProgressBar active={configLoading} label="正在刷新配置" />
 
-      {activeTab === "connection" && (
+      {activeTab === "home" && (
+        <React.Suspense fallback={<div className="home-dashboard-loading" aria-label="首页数据大屏加载中" />}>
+          <HomeDashboard />
+        </React.Suspense>
+      )}
+
+      {activeTab === "connection" && adminAuthenticated && (
         <React.Suspense
           fallback={
             <section className="connection-loading-shell card">
@@ -1087,7 +1388,7 @@ function App() {
         </React.Suspense>
       )}
 
-      {activeTab === "people" && (
+      {activeTab === "people" && adminAuthenticated && (
         <React.Suspense fallback={<div className="glass-skeleton people-skeleton" />}>
           <PeopleMappingCenter
             rows={nameIdRows}
@@ -1170,6 +1471,16 @@ function App() {
         </React.Suspense>
       )}
 
+      {activeTab === "analytics" && (
+        <React.Suspense fallback={<div className="analytics-loading-shell" aria-label="数据看板加载中" />}>
+          <DataAnalyticsCenter
+            configReady={configReady}
+            targetTable={targetTable}
+            setTargetTable={setTargetTable}
+          />
+        </React.Suspense>
+      )}
+
       {activeTab === "drawing" && (
         <React.Suspense fallback={<div className="glass-skeleton assignment-skeleton" />}>
           <DrawingAssignmentCenter
@@ -1197,7 +1508,7 @@ function App() {
         </React.Suspense>
       )}
 
-      {!(["commands", "status"].includes(activeTab)) && (
+      {!(["home", "commands", "status", "analytics"].includes(activeTab)) && (
         <button className="refresh-fab" onClick={loadConfig} aria-label="刷新配置" title="刷新配置">
           <RefreshCw size={18} />
         </button>
@@ -1205,6 +1516,14 @@ function App() {
       </main>
       </div>
       </div>
+      <AdminAccessGate
+        open={!adminSessionLoading && Boolean(adminTarget) && !adminAuthenticated}
+        targetLabel={adminTabLabels[adminTarget] || "受限页面"}
+        loading={adminSubmitting}
+        error={adminError}
+        onSubmit={submitAdminAccess}
+        onCancel={cancelAdminAccess}
+      />
     </>
   );
 }

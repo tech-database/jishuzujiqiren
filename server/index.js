@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
 import { parse as parseDotenv } from "dotenv";
@@ -17,6 +18,8 @@ import {
   getTenantAccessToken,
   parseSpreadsheetBuffer,
   queryDrawingClaimStatus,
+  queryDrawingAnalytics,
+  queryHomeDashboardTable,
   queryDrawingOwnerStats,
   queryUnclaimedDrawings,
   recalculateDrawingDurations,
@@ -33,7 +36,12 @@ const envPath = path.join(rootDir, ".env");
 const statusSyncIntervalMs = Number(process.env.STATUS_SYNC_INTERVAL_MS || 10000);
 const websocketStatusPath = path.join(__dirname, ".runtime", "long-connection-status.json");
 const configWritePassword = process.env.CONFIG_WRITE_PASSWORD || "888888";
-let statusSyncRunning = false;
+const adminAccessPassword = process.env.ADMIN_ACCESS_PASSWORD || "888000";
+const adminSessionCookie = "tech_admin_session";
+const adminSessionTtlMs = 8 * 60 * 60 * 1000;
+const adminSessions = new Map();
+const statusSyncRunningTables = new Set();
+let backgroundStatusCheckRunning = false;
 const lastBackgroundFingerprints = {};
 const statusSyncInfo = {
   enabled: true,
@@ -49,7 +57,27 @@ const statusSyncInfo = {
   lastError: "",
   lastSummary: null,
   skippedCount: 0,
+  tables: {},
 };
+
+function getTableSyncInfo(tableKey) {
+  if (!statusSyncInfo.tables[tableKey]) {
+    statusSyncInfo.tables[tableKey] = {
+      running: false,
+      range: null,
+      lastReason: "",
+      lastCheckedAt: "",
+      lastChangedAt: "",
+      lastSkippedAt: "",
+      lastStartedAt: "",
+      lastFinishedAt: "",
+      lastError: "",
+      lastSummary: null,
+      skippedCount: 0,
+    };
+  }
+  return statusSyncInfo.tables[tableKey];
+}
 
 const localCorsOrigins = new Set([
   `http://127.0.0.1:${port}`,
@@ -72,6 +100,77 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "2mb" }));
+
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    String(header)
+      .split(";")
+      .map((entry) => entry.trim().split("="))
+      .filter(([key]) => key)
+      .map(([key, ...value]) => [decodeURIComponent(key), decodeURIComponent(value.join("="))]),
+  );
+}
+
+function securePasswordEquals(candidate, expected) {
+  const left = createHash("sha256").update(String(candidate || "")).digest();
+  const right = createHash("sha256").update(String(expected || "")).digest();
+  return timingSafeEqual(left, right);
+}
+
+function readAdminSession(req) {
+  const token = parseCookies(req.headers.cookie)[adminSessionCookie];
+  if (!token) return null;
+  const session = adminSessions.get(token);
+  if (!session || session.expiresAt <= Date.now()) {
+    adminSessions.delete(token);
+    return null;
+  }
+  return { token, ...session };
+}
+
+function adminCookie(req, token, maxAgeSeconds) {
+  const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+  return [
+    `${adminSessionCookie}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${maxAgeSeconds}`,
+    secure ? "Secure" : "",
+  ].filter(Boolean).join("; ");
+}
+
+function requireAdminAccess(req, res, next) {
+  if (readAdminSession(req)) {
+    next();
+    return;
+  }
+  res.status(401).json({ ok: false, error: "需要管理员权限" });
+}
+
+app.get("/api/admin/session", (req, res) => {
+  const session = readAdminSession(req);
+  res.json({ ok: true, authenticated: Boolean(session), expiresAt: session?.expiresAt || null });
+});
+
+app.post("/api/admin/login", (req, res) => {
+  if (!securePasswordEquals(req.body?.password, adminAccessPassword)) {
+    res.status(401).json({ ok: false, error: "管理员验证失败" });
+    return;
+  }
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = Date.now() + adminSessionTtlMs;
+  adminSessions.set(token, { expiresAt });
+  res.setHeader("Set-Cookie", adminCookie(req, token, Math.floor(adminSessionTtlMs / 1000)));
+  res.json({ ok: true, authenticated: true, expiresAt });
+});
+
+app.post("/api/admin/logout", (req, res) => {
+  const session = readAdminSession(req);
+  if (session) adminSessions.delete(session.token);
+  res.setHeader("Set-Cookie", adminCookie(req, "", 0));
+  res.json({ ok: true, authenticated: false });
+});
 
 function formatDateInput(date) {
   const year = date.getFullYear();
@@ -268,26 +367,35 @@ async function runStatusSync(reason, range = {}, { skipIfRunning = false, suppre
     if (skipIfRunning || suppressErrors) return null;
     throw new Error("配置未加载，无法进行状态检测");
   }
-  if (statusSyncRunning) {
-    if (skipIfRunning) return null;
-    const error = new Error("状态检测正在进行，请稍后再试");
-    error.statusCode = 409;
-    throw error;
-  }
-  statusSyncRunning = true;
-  statusSyncInfo.running = true;
-  statusSyncInfo.lastReason = reason;
-  statusSyncInfo.lastStartedAt = new Date().toISOString();
-  statusSyncInfo.lastError = "";
   const syncRange = {
     startDate: range.startDate || "",
     endDate: range.endDate || "",
     tableKey: range.tableKey || "board",
   };
+  const tableSyncInfo = getTableSyncInfo(syncRange.tableKey);
+  if (statusSyncRunningTables.has(syncRange.tableKey)) {
+    if (skipIfRunning) return null;
+    const error = new Error(`${syncRange.tableKey === "paint" ? "油漆" : "胶板"}状态检测正在进行，请稍后再试`);
+    error.statusCode = 409;
+    throw error;
+  }
+  statusSyncRunningTables.add(syncRange.tableKey);
+  statusSyncInfo.running = true;
+  statusSyncInfo.lastReason = reason;
+  statusSyncInfo.lastStartedAt = new Date().toISOString();
+  statusSyncInfo.lastError = "";
   statusSyncInfo.range = syncRange;
+  Object.assign(tableSyncInfo, {
+    running: true,
+    range: syncRange,
+    lastReason: reason,
+    lastStartedAt: statusSyncInfo.lastStartedAt,
+    lastError: "",
+  });
   try {
     const result = await syncDrawingStatuses(syncRange);
     statusSyncInfo.lastSummary = result.summary;
+    tableSyncInfo.lastSummary = result.summary;
     if (result.summary.updated > 0) {
       console.log(
         `Drawing status sync (${reason}): updated=${result.summary.updated}, unclaimed=${result.summary.unclaimed}, drawing=${result.summary.drawing}, done=${result.summary.done}`,
@@ -296,54 +404,75 @@ async function runStatusSync(reason, range = {}, { skipIfRunning = false, suppre
     return result;
   } catch (error) {
     statusSyncInfo.lastError = error.message;
+    tableSyncInfo.lastError = error.message;
     console.error(`Drawing status sync failed (${reason}):`, error.message);
     if (!suppressErrors) throw error;
     return null;
   } finally {
-    statusSyncRunning = false;
-    statusSyncInfo.running = false;
+    statusSyncRunningTables.delete(syncRange.tableKey);
+    statusSyncInfo.running = statusSyncRunningTables.size > 0;
     statusSyncInfo.lastFinishedAt = new Date().toISOString();
+    tableSyncInfo.running = false;
+    tableSyncInfo.lastFinishedAt = statusSyncInfo.lastFinishedAt;
   }
 }
 
 async function runBackgroundStatusSync(reason = "timer") {
-  if (statusSyncRunning || !getConfigStatus().ready) return null;
+  if (backgroundStatusCheckRunning || statusSyncRunningTables.size > 0 || !getConfigStatus().ready) return null;
+  backgroundStatusCheckRunning = true;
   const results = [];
-  const configuredTableKeys = Object.entries(getConfigStatus().tables || {})
-    .filter(([, tableStatus]) => tableStatus.ready)
-    .map(([tableKey]) => tableKey);
-  for (const tableKey of configuredTableKeys) {
-    const range = { ...defaultStatusDateRange(), tableKey };
-    statusSyncInfo.range = range;
-    statusSyncInfo.lastCheckedAt = new Date().toISOString();
-    statusSyncInfo.lastError = "";
-    try {
-      const fingerprint = await getDrawingStatusFingerprint(range);
-      if (!lastBackgroundFingerprints[tableKey]) {
-        lastBackgroundFingerprints[tableKey] = fingerprint;
-        statusSyncInfo.lastReason = `baseline:${tableKey}`;
-        statusSyncInfo.lastSkippedAt = new Date().toISOString();
-        statusSyncInfo.skippedCount += 1;
-        continue;
+  const errors = [];
+  try {
+    const configuredTableKeys = Object.entries(getConfigStatus().tables || {})
+      .filter(([, tableStatus]) => tableStatus.ready)
+      .map(([tableKey]) => tableKey);
+    for (const tableKey of configuredTableKeys) {
+      const range = { ...defaultStatusDateRange(), tableKey };
+      const tableSyncInfo = getTableSyncInfo(tableKey);
+      statusSyncInfo.range = range;
+      statusSyncInfo.lastCheckedAt = new Date().toISOString();
+      tableSyncInfo.range = range;
+      tableSyncInfo.lastCheckedAt = statusSyncInfo.lastCheckedAt;
+      tableSyncInfo.lastError = "";
+      try {
+        const fingerprint = await getDrawingStatusFingerprint(range);
+        if (!lastBackgroundFingerprints[tableKey]) {
+          lastBackgroundFingerprints[tableKey] = fingerprint;
+          statusSyncInfo.lastReason = `baseline:${tableKey}`;
+          statusSyncInfo.lastSkippedAt = new Date().toISOString();
+          statusSyncInfo.skippedCount += 1;
+          tableSyncInfo.lastReason = statusSyncInfo.lastReason;
+          tableSyncInfo.lastSkippedAt = statusSyncInfo.lastSkippedAt;
+          tableSyncInfo.skippedCount += 1;
+          continue;
+        }
+        if (fingerprint === lastBackgroundFingerprints[tableKey]) {
+          statusSyncInfo.lastReason = `no-change:${tableKey}`;
+          statusSyncInfo.lastSkippedAt = new Date().toISOString();
+          statusSyncInfo.skippedCount += 1;
+          tableSyncInfo.lastReason = statusSyncInfo.lastReason;
+          tableSyncInfo.lastSkippedAt = statusSyncInfo.lastSkippedAt;
+          tableSyncInfo.skippedCount += 1;
+          continue;
+        }
+        statusSyncInfo.lastChangedAt = new Date().toISOString();
+        tableSyncInfo.lastChangedAt = statusSyncInfo.lastChangedAt;
+        const result = await runStatusSync(`table-change:${tableKey}`, range, { skipIfRunning: true, suppressErrors: true });
+        if (result) {
+          lastBackgroundFingerprints[tableKey] = await getDrawingStatusFingerprint(range);
+          results.push(result);
+        }
+      } catch (error) {
+        errors.push(`${tableKey === "paint" ? "油漆" : "胶板"}：${error.message}`);
+        tableSyncInfo.lastError = error.message;
+        console.error(`Drawing status change check failed (${reason}:${tableKey}):`, error.message);
       }
-      if (fingerprint === lastBackgroundFingerprints[tableKey]) {
-        statusSyncInfo.lastReason = `no-change:${tableKey}`;
-        statusSyncInfo.lastSkippedAt = new Date().toISOString();
-        statusSyncInfo.skippedCount += 1;
-        continue;
-      }
-      statusSyncInfo.lastChangedAt = new Date().toISOString();
-      const result = await runStatusSync(`table-change:${tableKey}`, range, { skipIfRunning: true, suppressErrors: true });
-      if (result) {
-        lastBackgroundFingerprints[tableKey] = await getDrawingStatusFingerprint(range);
-        results.push(result);
-      }
-    } catch (error) {
-      statusSyncInfo.lastError = error.message;
-      console.error(`Drawing status change check failed (${reason}:${tableKey}):`, error.message);
     }
+    statusSyncInfo.lastError = errors.join("；");
+    return results.length > 0 ? results : null;
+  } finally {
+    backgroundStatusCheckRunning = false;
   }
-  return results.length > 0 ? results : null;
 }
 
 app.get("/api/background-status-sync", (_req, res) => {
@@ -351,10 +480,23 @@ app.get("/api/background-status-sync", (_req, res) => {
 });
 
 app.get("/api/config", (_req, res) => {
-  res.json({ ok: true, config: publicConfig(), status: getConfigStatus() });
+  const adminAuthenticated = Boolean(readAdminSession(_req));
+  const config = adminAuthenticated
+    ? publicConfig()
+    : {
+        appId: "",
+        appSecretSet: Boolean(process.env.FEISHU_APP_SECRET),
+        bitableAppToken: "",
+        bitableTableId: "",
+        paintBitableAppToken: "",
+        paintBitableTableId: "",
+        replyEnabled: false,
+        nameIdMap: {},
+      };
+  res.json({ ok: true, config, status: getConfigStatus(), adminAuthenticated });
 });
 
-app.post("/api/config", async (req, res) => {
+app.post("/api/config", requireAdminAccess, async (req, res) => {
   try {
     assertConfigWritePassword(req.body?.adminPassword);
     const entries = applyRuntimeConfig(req.body || {});
@@ -366,7 +508,7 @@ app.post("/api/config", async (req, res) => {
   }
 });
 
-app.post("/api/check-connection", async (req, res) => {
+app.post("/api/check-connection", requireAdminAccess, async (req, res) => {
   try {
     const token = await getTenantAccessToken();
     const tableConfig = getBitableConfig(req.body?.tableKey);
@@ -504,6 +646,93 @@ app.post("/api/query-unclaimed-drawings", async (req, res) => {
 app.get("/api/drawing-owner-stats", async (req, res) => {
   try {
     const result = await queryDrawingOwnerStats({ tableKey: req.query.tableKey });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/home-dashboard", async (_req, res) => {
+  try {
+    const now = new Date();
+    const today = formatDateInput(now);
+    const monthStart = formatDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
+    const [personnel, boardToday, paintToday, boardPerformance, paintPerformance, health] =
+      await Promise.all([
+        queryDrawingOwnerStats(),
+        queryHomeDashboardTable({ startDate: today, endDate: today, tableKey: "board" }),
+        queryHomeDashboardTable({ startDate: today, endDate: today, tableKey: "paint" }),
+        queryDrawingAnalytics({ startDate: monthStart, endDate: today, tableKey: "board" }),
+        queryDrawingAnalytics({ startDate: monthStart, endDate: today, tableKey: "paint" }),
+        buildHealthStatus(),
+      ]);
+
+    const systemEvents = [
+      {
+        id: `config:${now.toISOString()}`,
+        time: now.toISOString(),
+        type: "配置",
+        source: "系统",
+        content: getConfigStatus().ready ? "运行配置已加载" : "运行配置尚未完整加载",
+        status: getConfigStatus().ready ? "正常" : "异常",
+      },
+      health.checkedAt && {
+        id: `health:${health.checkedAt}`,
+        time: health.checkedAt,
+        type: "检测",
+        source: "监控中心",
+        content: health.ok ? "任务状态与飞书连接检测通过" : "检测到连接或配置异常",
+        status: health.ok ? "正常" : "异常",
+      },
+      statusSyncInfo.lastFinishedAt && {
+        id: `sync:${statusSyncInfo.lastFinishedAt}`,
+        time: statusSyncInfo.lastFinishedAt,
+        type: "同步",
+        source: "数据服务",
+        content: "胶板与油漆状态同步完成",
+        status: statusSyncInfo.lastError ? "异常" : "成功",
+      },
+      ...Object.entries(health.checks || {}).map(([key, check]) => ({
+        id: `health-check:${key}:${health.checkedAt}`,
+        time: health.checkedAt,
+        type: key === "websocket" ? "连接" : "检测",
+        source: key === "board" ? "胶板" : key === "paint" ? "油漆" : key === "websocket" ? "飞书接口" : "监控中心",
+        content: check.message || `${key}检测完成`,
+        status: check.ok ? "正常" : "异常",
+      })),
+    ].filter(Boolean);
+
+    const realtimeLogs = [
+      ...boardToday.events,
+      ...paintToday.events,
+      ...systemEvents,
+    ]
+      .sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
+      .slice(0, 8);
+
+    res.json({
+      ok: true,
+      checkedAt: now.toISOString(),
+      range: { startDate: monthStart, endDate: today },
+      configReady: getConfigStatus().ready,
+      health,
+      personnel,
+      today: { board: boardToday, paint: paintToday },
+      performance: { board: boardPerformance, paint: paintPerformance },
+      realtimeLogs,
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/drawing-analytics", async (req, res) => {
+  try {
+    const result = await queryDrawingAnalytics({
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      tableKey: req.query.tableKey,
+    });
     res.json({ ok: true, ...result });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });

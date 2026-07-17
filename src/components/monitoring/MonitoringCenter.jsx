@@ -64,9 +64,10 @@ export default function MonitoringCenter({
   formatDisplayTime,
 }) {
   const normalized = useMemo(
-    () => normalizeStatusData(statusResult, backgroundSyncStatus),
-    [backgroundSyncStatus, statusResult],
+    () => normalizeStatusData(statusResult, null),
+    [statusResult],
   );
+  const selectedTableLabel = targetTable === "paint" ? "油漆表" : "胶板表";
   const distribution = useMemo(() => buildStatusDistribution(normalized.summary), [normalized.summary]);
   const completionRate = useMemo(() => calculateCompletionRate(normalized.summary), [normalized.summary]);
   const metrics = useMemo(
@@ -174,7 +175,7 @@ export default function MonitoringCenter({
           <div className="monitoring-panel-head">
             <div>
               <h3>任务状态分布</h3>
-              <p>来自 `summary.unclaimed / drawing / done` 与真实总数差值。</p>
+              <p>{selectedTableLabel}在当前日期范围内的任务分布。</p>
             </div>
             <StatusBadge tone={distribution.available ? "success" : "warning"}>{distribution.available ? "可用" : "暂无数据"}</StatusBadge>
           </div>
@@ -185,7 +186,7 @@ export default function MonitoringCenter({
           <div className="monitoring-panel-head">
             <div>
               <h3>完成率</h3>
-              <p>公式：已完成数量 / 检测任务总数。</p>
+              <p>公式：{selectedTableLabel}已完成数量 / 检测任务总数。</p>
             </div>
             <StatusBadge tone={completionRate.available ? "success" : "warning"}>{completionRate.available ? completionRate.label : "暂无数据"}</StatusBadge>
           </div>

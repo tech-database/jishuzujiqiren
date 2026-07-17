@@ -1,0 +1,129 @@
+.admin-access-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 31, 54, 0.28);
+  backdrop-filter: blur(5px);
+}
+
+.admin-access-dialog {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  width: min(100%, 420px);
+  padding: 26px;
+  border: 1px solid #cbdcf1;
+  border-radius: 14px;
+  color: #172033;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(24, 55, 96, 0.16);
+}
+
+.admin-access-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  color: #2367d8;
+  background: #edf5ff;
+}
+
+.admin-access-dialog h2 { margin: 1px 0 6px; font-size: 20px; }
+.admin-access-dialog p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.6; }
+.admin-access-dialog form { display: grid; grid-column: 1 / -1; gap: 9px; margin-top: 3px; }
+.admin-access-dialog label { color: #334155; font-size: 13px; font-weight: 750; }
+.admin-access-dialog input {
+  width: 100%;
+  height: 42px;
+  box-sizing: border-box;
+  border: 1px solid #cbd8e8;
+  border-radius: 9px;
+  padding: 0 12px;
+  color: #172033;
+  background: #f8fbff;
+  font: inherit;
+  outline: none;
+}
+.admin-access-dialog input:focus { border-color: #3978f6; box-shadow: 0 0 0 3px rgba(57,120,246,.13); }
+.admin-access-error { color: #c6283e !important; font-weight: 700; }
+.admin-access-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: #2268dc;
+  font-weight: 800;
+  cursor: pointer;
+}
+.admin-access-submit:hover:not(:disabled) { background: #1858c4; }
+.admin-access-submit:disabled { opacity: .55; cursor: not-allowed; }
+.admin-access-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+}
+.admin-access-close:hover { color: #172033; background: #f0f4f9; }
+
+.admin-login-button,
+.admin-logout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-bottom: 8px;
+  border: 1px solid #d7e1ee;
+  border-radius: 9px;
+  color: #53657d;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-login-button {
+  border-color: #c9d9f4;
+  color: #245eb6;
+  background: #f3f7ff;
+}
+.admin-login-button:hover {
+  border-color: #91b5ef;
+  color: #174b9d;
+  background: #eaf2ff;
+}
+.admin-logout-button:hover { border-color: #f1b7c0; color: #b4233a; background: #fff7f8; }
+.admin-login-button:focus-visible,
+.admin-logout-button:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.48);
+  outline-offset: 1px;
+}
+.sidebar-collapsed .admin-login-button span,
+.sidebar-collapsed .admin-logout-button span { display: none; }
+
+@media (max-width: 1200px) and (min-width: 768px) {
+  .admin-login-button span,
+  .admin-logout-button span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-access-backdrop,
+  .admin-access-dialog { animation: none !important; transition: none !important; }
+}
