@@ -479,7 +479,37 @@
 .home-performance-title > span { position: relative; width: min(15vw,180px); border-top: 2px solid #3280ed; }
 .home-performance-title > span::after { content: ""; position: absolute; top: -2px; width: 54px; border-top: 2px solid #54d3ff; }
 .home-performance-title > span:last-child { transform: scaleX(-1); }
-.home-performance-title small { font-size: 13px; font-weight: 750; }
+.home-performance-heading { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: nowrap; }
+.home-performance-heading > strong { font-size: 22px; font-weight: 900; }
+.home-performance-range { display: flex; align-items: center; gap: 5px; }
+.home-performance-range input {
+  width: 126px;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid rgba(40,126,220,.42);
+  border-radius: 6px;
+  padding: 0 7px;
+  color: #173d78;
+  background: rgba(255,255,255,.82);
+  font: 700 12px/1 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color-scheme: light;
+}
+.home-performance-range input:hover { border-color: #2488ec; }
+.home-performance-range input:focus-visible,
+.home-performance-range button:focus-visible { outline: 2px solid rgba(22,119,255,.42); outline-offset: 1px; }
+.home-performance-range b { color: #5577a6; font-size: 12px; }
+.home-performance-range button {
+  height: 28px;
+  border: 1px solid rgba(40,126,220,.38);
+  border-radius: 6px;
+  padding: 0 9px;
+  color: #1359aa;
+  background: rgba(233,245,255,.9);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.home-performance-range button:hover { border-color: #2488ec; background: #fff; }
 
 .home-performance-grid {
   position: relative;
@@ -700,6 +730,11 @@
   .home-performance-metrics > span { padding-inline: 7px; }
   .home-performance-metrics strong { font-size: 20px; }
   .home-performance-content { gap: 7px; padding-inline: 8px; }
+  .home-performance-title { gap: 10px; }
+  .home-performance-title > span { width: min(8vw,100px); }
+  .home-performance-heading { gap: 8px; }
+  .home-performance-heading > strong { font-size: 18px; }
+  .home-performance-range input { width: 116px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

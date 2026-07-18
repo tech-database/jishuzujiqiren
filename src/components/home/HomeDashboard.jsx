@@ -29,6 +29,24 @@ function formatClock(value) {
   return date.toLocaleTimeString("zh-CN", { hour12: false });
 }
 
+function formatDateInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function defaultPerformanceRange() {
+  const end = new Date();
+  const start = new Date(end);
+  const day = start.getDate();
+  start.setDate(1);
+  start.setMonth(start.getMonth() - 1);
+  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  start.setDate(Math.min(day, lastDay));
+  return { startDate: formatDateInput(start), endDate: formatDateInput(end) };
+}
+
 function CountUpNumber({ value = 0, suffix = "", decimals, className = "" }) {
   const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
   const precision = decimals ?? (Number.isInteger(numericValue) ? 0 : 1);
@@ -313,6 +331,7 @@ export default function HomeDashboard() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== "hidden");
+  const [performanceRange, setPerformanceRange] = useState(defaultPerformanceRange);
   const requestRef = useRef(null);
   const controllerRef = useRef(null);
   const mountedRef = useRef(true);
@@ -323,7 +342,11 @@ export default function HomeDashboard() {
     controllerRef.current = controller;
     const request = (async () => {
       try {
-        const query = new URLSearchParams({ refresh: String(Date.now()) });
+        const query = new URLSearchParams({
+          refresh: String(Date.now()),
+          startDate: performanceRange.startDate,
+          endDate: performanceRange.endDate,
+        });
         const response = await fetch(`/api/home-dashboard?${query}`, {
           signal: controller.signal,
           cache: "no-store",
@@ -350,7 +373,7 @@ export default function HomeDashboard() {
       requestRef.current = null;
       if (controllerRef.current === controller) controllerRef.current = null;
     }
-  }, []);
+  }, [performanceRange.endDate, performanceRange.startDate]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -413,9 +436,8 @@ export default function HomeDashboard() {
   const personnelSummary = personnel.summary || {};
   const board = data?.today?.board?.summary || {};
   const paint = data?.today?.paint?.summary || {};
-  const rangeLabel = data?.range
-    ? `${data.range.startDate.replaceAll("-", "/")}—${data.range.endDate.replaceAll("-", "/")}`
-    : "—";
+  const todayInput = formatDateInput(now);
+  const resetPerformanceRange = () => setPerformanceRange(defaultPerformanceRange());
 
   return (
     <div className={`home-page ${pageVisible ? "" : "is-paused"}`.trim()}>
@@ -454,7 +476,32 @@ export default function HomeDashboard() {
           <PersonnelPanel personnel={personnel} />
         </section>
 
-        <div className="home-performance-title"><span />区间绩效分析 <small>{rangeLabel}</small><span /></div>
+        <div className="home-performance-title">
+          <span />
+          <div className="home-performance-heading">
+            <strong>区间绩效分析</strong>
+            <div className="home-performance-range" role="group" aria-label="绩效统计日期范围">
+              <input
+                type="date"
+                aria-label="绩效统计开始日期"
+                value={performanceRange.startDate}
+                max={performanceRange.endDate}
+                onChange={(event) => setPerformanceRange((range) => ({ ...range, startDate: event.target.value }))}
+              />
+              <b aria-hidden="true">—</b>
+              <input
+                type="date"
+                aria-label="绩效统计结束日期"
+                value={performanceRange.endDate}
+                min={performanceRange.startDate}
+                max={todayInput}
+                onChange={(event) => setPerformanceRange((range) => ({ ...range, endDate: event.target.value }))}
+              />
+              <button type="button" onClick={resetPerformanceRange} title="恢复最近一个月">近1月</button>
+            </div>
+          </div>
+          <span />
+        </div>
         <section className="home-performance-grid">
           <PerformancePanel title="胶板绩效" data={data?.performance?.board} tone="board" />
           <PerformancePanel title="油漆绩效" data={data?.performance?.paint} tone="paint" />

@@ -187,6 +187,24 @@ function addDays(date, days) {
   return next;
 }
 
+function addMonthsClamped(date, months) {
+  const next = new Date(date);
+  const day = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, lastDay));
+  return next;
+}
+
+function parseDashboardDate(value, fallback) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return formatDateInput(date) === text ? text : fallback;
+}
+
 function defaultStatusDateRange() {
   const today = new Date();
   return {
@@ -680,21 +698,25 @@ app.get("/api/drawing-owner-stats", async (req, res) => {
   }
 });
 
-app.get("/api/home-dashboard", async (_req, res) => {
+app.get("/api/home-dashboard", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");
     const now = new Date();
     const today = formatDateInput(now);
-    const monthStart = formatDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
+    const defaultRangeStart = formatDateInput(addMonthsClamped(now, -1));
+    const rangeEnd = parseDashboardDate(req.query.endDate, today);
+    const rangeStart = parseDashboardDate(req.query.startDate, defaultRangeStart);
+    if (rangeStart > rangeEnd) throw new Error("绩效统计开始日期不能晚于结束日期");
+    if (rangeEnd > today) throw new Error("绩效统计结束日期不能晚于今天");
     const [personnel, boardToday, paintToday, boardPerformance, paintPerformance, health] =
       await Promise.all([
         queryDrawingOwnerStats(),
         queryHomeDashboardTable({ startDate: today, endDate: today, tableKey: "board" }),
         queryHomeDashboardTable({ startDate: today, endDate: today, tableKey: "paint" }),
-        queryDrawingAnalytics({ startDate: monthStart, endDate: today, tableKey: "board" }),
-        queryDrawingAnalytics({ startDate: monthStart, endDate: today, tableKey: "paint" }),
+        queryDrawingAnalytics({ startDate: rangeStart, endDate: rangeEnd, tableKey: "board" }),
+        queryDrawingAnalytics({ startDate: rangeStart, endDate: rangeEnd, tableKey: "paint" }),
         buildHealthStatus(),
       ]);
 
@@ -746,7 +768,7 @@ app.get("/api/home-dashboard", async (_req, res) => {
     res.json({
       ok: true,
       checkedAt: now.toISOString(),
-      range: { startDate: monthStart, endDate: today },
+      range: { startDate: rangeStart, endDate: rangeEnd },
       configReady: getConfigStatus().ready,
       health,
       personnel,
