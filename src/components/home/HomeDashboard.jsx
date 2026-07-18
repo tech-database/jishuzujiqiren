@@ -323,7 +323,12 @@ export default function HomeDashboard() {
     controllerRef.current = controller;
     const request = (async () => {
       try {
-        const response = await fetch("/api/home-dashboard", { signal: controller.signal });
+        const query = new URLSearchParams({ refresh: String(Date.now()) });
+        const response = await fetch(`/api/home-dashboard?${query}`, {
+          signal: controller.signal,
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
         const result = await response.json();
         if (!result.ok) throw new Error(result.error || "首页数据加载失败");
         if (mountedRef.current) {
@@ -353,17 +358,26 @@ export default function HomeDashboard() {
     let clockTimer;
 
     const stopTimers = () => {
-      window.clearInterval(refreshTimer);
+      window.clearTimeout(refreshTimer);
       window.clearInterval(clockTimer);
       refreshTimer = undefined;
       clockTimer = undefined;
     };
 
+    const scheduleRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(async () => {
+        await loadDashboard();
+        if (mountedRef.current && document.visibilityState !== "hidden") scheduleRefresh();
+      }, 10000);
+    };
+
     const startTimers = () => {
       stopTimers();
       setNow(new Date());
-      loadDashboard();
-      refreshTimer = window.setInterval(loadDashboard, 30000);
+      loadDashboard().finally(() => {
+        if (mountedRef.current && document.visibilityState !== "hidden") scheduleRefresh();
+      });
       clockTimer = window.setInterval(() => setNow(new Date()), 1000);
     };
 

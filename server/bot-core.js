@@ -871,6 +871,10 @@ function parseBitableDateValue(value) {
     return parseBitableDateValue(value.timestamp ?? value.value ?? value.text ?? value.name);
   }
   const text = String(value || "").trim();
+  if (/^\d{10,13}$/.test(text)) {
+    const timestamp = Number(text);
+    return text.length <= 10 ? timestamp * 1000 : timestamp;
+  }
   const normalized = text.replace(/\./g, "-").replace(/\//g, "-");
   const match = normalized.match(
     /^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
@@ -1154,22 +1158,40 @@ export async function queryHomeDashboardTable({ startDate, endDate, tableKey } =
     const materialCode = getDrawingMaterialCode(fields) || "未填料号";
     const claimTime = parseBitableDateValue(fields[drawingClaimTimeField]);
     const completeTime = parseBitableDateValue(fields[drawingCompleteTimeField]);
+    const createdTime = parseBitableDateValue(record.created_time);
 
     if (status === drawingStatuses.unclaimed) summary.unclaimed += 1;
     else if (status === drawingStatuses.drawing) summary.drawing += 1;
     else if (status === drawingStatuses.done) summary.done += 1;
 
-    const eventTime = completeTime || claimTime;
-    if (eventTime) {
+    if (createdTime) {
       events.push({
-        id: `${tableConfig.key}:${record.record_id}:${eventTime}`,
-        time: new Date(eventTime).toISOString(),
-        type: completeTime ? "完成" : "接图",
+        id: `${tableConfig.key}:${record.record_id}:created:${createdTime}`,
+        time: new Date(createdTime).toISOString(),
+        type: "任务",
         source: tableConfig.label,
-        content: completeTime
-          ? `${owner || "绘图人员"}完成 ${materialCode}`
-          : `${owner || "绘图人员"}领取 ${materialCode}`,
-        status: completeTime ? "成功" : "正常",
+        content: `${materialCode}进入任务队列`,
+        status: "正常",
+      });
+    }
+    if (claimTime) {
+      events.push({
+        id: `${tableConfig.key}:${record.record_id}:claim:${claimTime}`,
+        time: new Date(claimTime).toISOString(),
+        type: "接图",
+        source: tableConfig.label,
+        content: `${owner || "绘图人员"}领取 ${materialCode}`,
+        status: "正常",
+      });
+    }
+    if (completeTime) {
+      events.push({
+        id: `${tableConfig.key}:${record.record_id}:complete:${completeTime}`,
+        time: new Date(completeTime).toISOString(),
+        type: "完成",
+        source: tableConfig.label,
+        content: `${owner || "绘图人员"}完成 ${materialCode}`,
+        status: "成功",
       });
     }
   }

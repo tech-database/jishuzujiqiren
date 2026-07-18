@@ -44,6 +44,7 @@ const adminSessions = new Map();
 const statusSyncRunningTables = new Set();
 let backgroundStatusCheckRunning = false;
 const lastBackgroundFingerprints = {};
+const serverStartedAt = new Date().toISOString();
 const statusSyncInfo = {
   enabled: true,
   mode: "on_change",
@@ -681,6 +682,9 @@ app.get("/api/drawing-owner-stats", async (req, res) => {
 
 app.get("/api/home-dashboard", async (_req, res) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
     const now = new Date();
     const today = formatDateInput(now);
     const monthStart = formatDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -696,8 +700,8 @@ app.get("/api/home-dashboard", async (_req, res) => {
 
     const systemEvents = [
       {
-        id: `config:${now.toISOString()}`,
-        time: now.toISOString(),
+        id: `config:${serverStartedAt}`,
+        time: serverStartedAt,
         type: "配置",
         source: "系统",
         content: getConfigStatus().ready ? "运行配置已加载" : "运行配置尚未完整加载",
@@ -719,14 +723,16 @@ app.get("/api/home-dashboard", async (_req, res) => {
         content: "胶板与油漆状态同步完成",
         status: statusSyncInfo.lastError ? "异常" : "成功",
       },
-      ...Object.entries(health.checks || {}).map(([key, check]) => ({
-        id: `health-check:${key}:${health.checkedAt}`,
-        time: health.checkedAt,
-        type: key === "websocket" ? "连接" : "检测",
-        source: key === "board" ? "胶板" : key === "paint" ? "油漆" : key === "websocket" ? "飞书接口" : "监控中心",
-        content: check.message || `${key}检测完成`,
-        status: check.ok ? "正常" : "异常",
-      })),
+      ...Object.entries(health.checks || {})
+        .filter(([, check]) => !check.ok)
+        .map(([key, check]) => ({
+          id: `health-check:${key}:${health.checkedAt}`,
+          time: health.checkedAt,
+          type: key === "websocket" ? "连接" : "检测",
+          source: key === "board" ? "胶板" : key === "paint" ? "油漆" : key === "websocket" ? "飞书接口" : "监控中心",
+          content: check.message || `${key}检测异常`,
+          status: "异常",
+        })),
     ].filter(Boolean);
 
     const realtimeLogs = [
