@@ -84,6 +84,7 @@ export default function OrderConfirmationCenter({ configReady, targetTable, setT
               {state.data.alreadyConfirmedCount > 0
                 ? `另有 ${state.data.alreadyConfirmedCount} 条原本已是“是”。`
                 : "所有命中记录均已更新为“是”。"}
+              {state.data.missing?.length > 0 && ` 未找到：${state.data.missing.join("、")}。`}
             </p>
             <div className="assignment-result-codes">
               {(state.data.materialCodes || []).map((code) => <code key={code}>{code}</code>)}

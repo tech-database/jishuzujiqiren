@@ -628,7 +628,7 @@ app.post("/api/confirm-orders", async (req, res) => {
       Array.isArray(req.body?.materialCodes) && req.body.materialCodes.length > 0
         ? req.body.materialCodes
         : extractMaterialCodes(req.body?.text || "");
-    const result = await confirmDrawingOrders({
+    const { result, missing } = await confirmDrawingOrders({
       materialCodes,
       tableKey: req.body?.tableKey,
     });
@@ -640,6 +640,7 @@ app.post("/api/confirm-orders", async (req, res) => {
       matchedCount: result.length,
       alreadyConfirmedCount: alreadyConfirmed.length,
       materialCodes: [...new Set(result.map((item) => item.materialCode))],
+      missing,
       result,
     });
   } catch (error) {

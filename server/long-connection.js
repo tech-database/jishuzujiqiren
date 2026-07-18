@@ -247,7 +247,7 @@ async function handleDrawingComplete(message) {
 
 async function handleOrderConfirmation(message) {
   const materialCodes = extractMaterialCodes(message.content);
-  const result = await confirmDrawingOrders({
+  const { result, missing } = await confirmDrawingOrders({
     materialCodes,
     tableKey: optionalCommandTableKey(message.content),
   });
@@ -255,9 +255,10 @@ async function handleOrderConfirmation(message) {
   const alreadyConfirmedCount = result.length - updatedCount;
   const confirmedCodes = [...new Set(result.map((item) => item.materialCode))].join("，");
   const existingText = alreadyConfirmedCount > 0 ? `，其中 ${alreadyConfirmedCount} 条原本已确认` : "";
+  const missingText = missing.length > 0 ? `；未找到：${missing.join("，")}` : "";
   await sendReply(
     message.chatId,
-    `下单确认成功：${confirmedCodes}，匹配 ${result.length} 条，更新 ${updatedCount} 条${existingText}。`,
+    `下单确认完成：${confirmedCodes}，匹配 ${result.length} 条，更新 ${updatedCount} 条${existingText}${missingText}。`,
   );
 }
 

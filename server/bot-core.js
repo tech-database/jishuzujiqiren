@@ -729,6 +729,13 @@ function normalizeMaterialCodes(materialCodes) {
   return codes;
 }
 
+function normalizeMaterialCodeForMatch(value) {
+  return bitableValueToText(value)
+    .normalize("NFKC")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
 function isOrderConfirmed(value) {
   if (value === true || value === 1) return true;
   if (Array.isArray(value)) return value.some((item) => isOrderConfirmed(item));
@@ -748,7 +755,10 @@ function matchDrawingRecordsByMaterialCodes(records, codes) {
   const matchedRecords = codes.map((materialCode) => ({
     materialCode,
     records: records.filter((record) =>
-      drawingMaterialFields.some((field) => bitableValueToText(record.fields?.[field]) === materialCode),
+      drawingMaterialFields.some(
+        (field) =>
+          normalizeMaterialCodeForMatch(record.fields?.[field]) === normalizeMaterialCodeForMatch(materialCode),
+      ),
     ),
   }));
   const missing = matchedRecords.filter((item) => item.records.length === 0).map((item) => item.materialCode);
@@ -1455,7 +1465,7 @@ export async function confirmDrawingOrders({ materialCodes, tableKey }) {
   }
 
   const missing = codes.filter((code) => !foundCodes.has(code));
-  if (missing.length > 0) throw new Error(`未找到料号：${missing.join("，")}`);
+  if (matchedItems.length === 0) throw new Error(`未找到料号：${missing.join("，")}`);
 
   const result = [];
   for (const item of matchedItems) {
@@ -1475,7 +1485,7 @@ export async function confirmDrawingOrders({ materialCodes, tableKey }) {
       });
     }
   }
-  return result;
+  return { result, missing };
 }
 
 async function uploadBitableImage(token, tableConfig, image) {
