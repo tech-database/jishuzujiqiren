@@ -414,7 +414,7 @@ export default function HomeDashboard() {
         <div className="home-tech-edge" aria-hidden="true" />
 
         <header className="home-dashboard-header">
-          <div className="home-title-line left" /><h1>技术组机器人 · 智能运行数据中心</h1><div className="home-title-line right" />
+          <div className="home-title-line left" /><h1>技术组 · 智能运行数据中心</h1><div className="home-title-line right" />
           <div className="home-clock"><strong>{formatDate(now, true)}</strong><span><i />实时更新</span></div>
           <div className="home-system-status">
             <StatusChip icon={CheckCircle2} ok={Boolean(data?.health?.ok)}>检测{data?.health?.ok ? "通过" : "异常"}</StatusChip>

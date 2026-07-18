@@ -176,7 +176,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
           description={`${tableLabel}表内各绘图人的记录数量。`}
           items={data?.owners}
           valueKey="count"
-          suffix=" 条"
+          suffix=" 张"
           tone="blue"
           loading={loading}
         />
@@ -205,7 +205,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
           description="按区域汇总当前日期范围内的绘图记录。"
           items={data?.regions}
           valueKey="count"
-          suffix=" 条"
+          suffix=" 张"
           tone="green"
           loading={loading}
           emptyText="当前日期范围内没有区域数据"
