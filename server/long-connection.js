@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   claimDrawingOwners,
   completeDrawings,
+  confirmDrawingOrders,
   createBitableRecords,
   ensureConfig,
   extractMaterialCodes,
@@ -162,9 +163,10 @@ function commandHelpText() {
     "1. @机器人 胶板新增 / @机器人 油漆新增：开始上传 Excel/CSV，上传完成后发送 @机器人 完成",
     "2. @机器人 料号 领图：自动在胶板/油漆表匹配料号，把发送人写入绘图人并改为绘图中",
     "3. @机器人 料号 绘图完成：自动在胶板/油漆表匹配料号，改为绘图完成并记录完成时间/用时（分钟数）",
-    "4. @机器人 查询未领取：分别统计胶板、油漆和合计；也可发送 胶板查询未领取 / 油漆查询未领取 单独查询",
-    "5. @机器人 状态检测：按默认日期范围同步状态并返回数量",
-    "6. @机器人 获取ID：回复发送人的飞书用户 ID",
+    "4. @机器人 料号 下单确认：匹配料号并把“是否下单”更新为“是”；可加胶板或油漆指定表",
+    "5. @机器人 查询未领取：分别统计胶板、油漆和合计；也可发送 胶板查询未领取 / 油漆查询未领取 单独查询",
+    "6. @机器人 状态检测：按默认日期范围同步状态并返回数量",
+    "7. @机器人 获取ID：回复发送人的飞书用户 ID",
     "日期范围可选：在口令后追加 2026-07-11 2026-07-13；不写则默认前天、昨天、今天。",
   ].join("\n");
 }
@@ -241,6 +243,22 @@ async function handleDrawingComplete(message) {
   const result = await completeDrawings({ materialCodes, ...range });
   const completedCodes = [...new Set(result.map((item) => item.materialCode))].join("\uFF0C");
   await sendReply(message.chatId, `绘图完成已同步：${completedCodes}，共更新 ${result.length} 条记录。`);
+}
+
+async function handleOrderConfirmation(message) {
+  const materialCodes = extractMaterialCodes(message.content);
+  const result = await confirmDrawingOrders({
+    materialCodes,
+    tableKey: optionalCommandTableKey(message.content),
+  });
+  const updatedCount = result.filter((item) => item.changed).length;
+  const alreadyConfirmedCount = result.length - updatedCount;
+  const confirmedCodes = [...new Set(result.map((item) => item.materialCode))].join("，");
+  const existingText = alreadyConfirmedCount > 0 ? `，其中 ${alreadyConfirmedCount} 条原本已确认` : "";
+  await sendReply(
+    message.chatId,
+    `下单确认成功：${confirmedCodes}，匹配 ${result.length} 条，更新 ${updatedCount} 条${existingText}。`,
+  );
 }
 
 async function handleUnclaimedQuery(message) {
@@ -339,6 +357,11 @@ async function handleGetId(message) {
 function isDrawingCompleteCommand(message) {
   const content = String(message.content || "").trim();
   return isMentionedMessage(message) && /绘图完成|完成图|图纸完成/.test(content);
+}
+
+function isOrderConfirmationCommand(message) {
+  const content = String(message.content || "").trim();
+  return isMentionedMessage(message) && /下单确认|确认下单/.test(content);
 }
 
 function isUnclaimedQueryCommand(message) {
@@ -663,6 +686,10 @@ channel.on("message", async (message) => {
     }
     if (isMentionedMessage(message) && isDrawingCompleteCommand(message)) {
       await handleDrawingComplete(message);
+      return;
+    }
+    if (isOrderConfirmationCommand(message)) {
+      await handleOrderConfirmation(message);
       return;
     }
     if (isMentionedMessage(message) && isUnclaimedQueryCommand(message)) {

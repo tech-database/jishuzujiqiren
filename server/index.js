@@ -9,6 +9,7 @@ import { parse as parseDotenv } from "dotenv";
 import {
   claimDrawingOwners,
   completeDrawings,
+  confirmDrawingOrders,
   createBitableRecords,
   extractMaterialCodes,
   extractTextFromFeishuEvent,
@@ -613,6 +614,31 @@ app.post("/api/complete-drawing", async (req, res) => {
     res.json({
       ok: true,
       count: result.length,
+      materialCodes: [...new Set(result.map((item) => item.materialCode))],
+      result,
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/confirm-orders", async (req, res) => {
+  try {
+    const materialCodes =
+      Array.isArray(req.body?.materialCodes) && req.body.materialCodes.length > 0
+        ? req.body.materialCodes
+        : extractMaterialCodes(req.body?.text || "");
+    const result = await confirmDrawingOrders({
+      materialCodes,
+      tableKey: req.body?.tableKey,
+    });
+    const updated = result.filter((item) => item.changed);
+    const alreadyConfirmed = result.filter((item) => !item.changed);
+    res.json({
+      ok: true,
+      count: updated.length,
+      matchedCount: result.length,
+      alreadyConfirmedCount: alreadyConfirmed.length,
       materialCodes: [...new Set(result.map((item) => item.materialCode))],
       result,
     });

@@ -6810,6 +6810,24 @@ button {
   gap: 22px;
 }
 
+.order-table-field .table-selector {
+  width: 100%;
+}
+
+.order-table-field .table-selector button {
+  flex: 1 1 0;
+}
+
+.order-summary-panel .order-table-name {
+  color: var(--color-ink);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.order-summary-panel .order-target-value {
+  color: var(--color-success);
+}
+
 .assignment-skeleton {
   min-height: 420px;
   border-radius: var(--radius-card);

@@ -710,6 +710,7 @@ const drawingDurationField = "\u7528\u65f6";
 const drawingDurationFieldAliases = ["用时（分）", "用时(分)", "用时（分钟）", "用时(分钟)", drawingDurationField];
 const drawingScoreField = "分值";
 const drawingRegionField = "区域";
+const drawingOrderField = "是否下单";
 const drawingOwnerAliases = {
   "\u83ab\u957f\u5cf0": "\u83ab\u957f\u950b",
 };
@@ -725,6 +726,21 @@ function normalizeMaterialCodes(materialCodes) {
     throw new Error("\u7f3a\u5c11\u6599\u53f7\uff0c\u8bf7\u8f93\u5165\u9700\u8981\u67e5\u8be2\u7684\u6599\u53f7");
   }
   return codes;
+}
+
+function isOrderConfirmed(value) {
+  if (value === true || value === 1) return true;
+  if (Array.isArray(value)) return value.some((item) => isOrderConfirmed(item));
+  if (value && typeof value === "object") {
+    return isOrderConfirmed(value.value ?? value.text ?? value.name ?? value.label);
+  }
+  return /^(?:是|已下单|true|yes|1)$/i.test(String(value || "").trim());
+}
+
+function orderConfirmedValue(fieldType) {
+  if (fieldType === 7) return true;
+  if (fieldType === 4) return ["是"];
+  return "是";
 }
 
 function matchDrawingRecordsByMaterialCodes(records, codes) {
@@ -1390,6 +1406,72 @@ export async function completeDrawings({ materialCodes, startDate, endDate, tabl
       }
       await updateBitableRecord(token, item.tableConfig, record.record_id, fields);
       result.push({ table: item.tableConfig.key, recordId: record.record_id, materialCode: item.materialCode });
+    }
+  }
+  return result;
+}
+
+export async function confirmDrawingOrders({ materialCodes, tableKey }) {
+  let codes;
+  try {
+    codes = normalizeMaterialCodes(materialCodes);
+  } catch {
+    throw new Error("缺少料号，请输入需要确认下单的料号");
+  }
+
+  const foundCodes = new Set();
+  const matchedItems = [];
+  const token = await getTenantAccessToken();
+  let eligibleTableCount = 0;
+  for (const key of drawingTableKeys(tableKey)) {
+    let tableConfig;
+    try {
+      tableConfig = getBitableConfig(key);
+    } catch (error) {
+      if (tableKey) throw error;
+      continue;
+    }
+    const fieldTypes = await getBitableFieldMap(token, tableConfig);
+    if (!fieldTypes.has(drawingOrderField)) {
+      if (tableKey) throw new Error(`${tableConfig.label}表缺少“${drawingOrderField}”字段`);
+      continue;
+    }
+    eligibleTableCount += 1;
+
+    const { matchedRecords } = matchDrawingRecordsByMaterialCodes(
+      await listBitableRecords(token, tableConfig),
+      codes,
+    );
+    for (const item of matchedRecords) {
+      if (item.records.length === 0) continue;
+      foundCodes.add(item.materialCode);
+      matchedItems.push({ ...item, fieldTypes, tableConfig });
+    }
+  }
+
+  if (eligibleTableCount === 0) {
+    throw new Error(`已配置的数据表均缺少“${drawingOrderField}”字段`);
+  }
+
+  const missing = codes.filter((code) => !foundCodes.has(code));
+  if (missing.length > 0) throw new Error(`未找到料号：${missing.join("，")}`);
+
+  const result = [];
+  for (const item of matchedItems) {
+    const fieldType = item.fieldTypes.get(drawingOrderField);
+    for (const record of item.records) {
+      const alreadyConfirmed = isOrderConfirmed(record.fields?.[drawingOrderField]);
+      if (!alreadyConfirmed) {
+        await updateBitableRecord(token, item.tableConfig, record.record_id, {
+          [drawingOrderField]: orderConfirmedValue(fieldType),
+        });
+      }
+      result.push({
+        table: item.tableConfig.key,
+        recordId: record.record_id,
+        materialCode: item.materialCode,
+        changed: !alreadyConfirmed,
+      });
     }
   }
   return result;

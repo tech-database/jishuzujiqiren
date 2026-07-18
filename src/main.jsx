@@ -16,6 +16,7 @@ import {
   LogOut,
   MessageSquareText,
   Menu,
+  PackageCheck,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -48,6 +49,7 @@ const PeopleMappingCenter = React.lazy(() => import("./components/people/PeopleM
 const DrawingOperationsCenter = React.lazy(() => import("./components/drawing/DrawingOperationsCenter.jsx"));
 const DataImportCenter = React.lazy(() => import("./components/import-write/DataImportCenter.jsx"));
 const DrawingAssignmentCenter = React.lazy(() => import("./components/assignment/DrawingAssignmentCenter.jsx"));
+const OrderConfirmationCenter = React.lazy(() => import("./components/orders/OrderConfirmationCenter.jsx"));
 const DataAnalyticsCenter = React.lazy(() => import("./components/analytics/DataAnalyticsCenter.jsx"));
 const HomeDashboard = React.lazy(() => import("./components/home/HomeDashboard.jsx"));
 
@@ -79,6 +81,7 @@ const tabRoutes = {
   analytics: "/analytics",
   upload: "/upload",
   drawing: "/drawing",
+  orders: "/orders",
 };
 
 const adminOnlyTabs = new Set(["connection", "people"]);
@@ -224,6 +227,7 @@ function RobotStatusWidget({ activeTab, configReady, healthStatus, statusResult,
     owners: "绘图人动态",
     upload: "数据导入",
     drawing: "领图登记",
+    orders: "下单确认",
   };
   const hasRangeCompletion = typeof statusResult?.summary?.done === "number";
   const completed = statusResult?.summary?.done ?? ownerStats?.summary?.todayCompleted ?? null;
@@ -335,6 +339,12 @@ const feishuCommands = [
     command: "@机器人 料号 绘图完成",
     example: "@机器人 I-089F-K42 绘图完成 2026-07-11 2026-07-13",
     result: "自动在胶板/油漆表匹配料号，状态改为绘图完成，并将用时记录为分钟数。",
+  },
+  {
+    title: "下单确认",
+    command: "@机器人 料号 下单确认",
+    example: "@机器人 I-089F-K42 下单确认",
+    result: "自动匹配胶板/油漆表中的料号，把“是否下单”更新为“是”；口令中可加胶板或油漆指定目标表。",
   },
   {
     title: "查询未领取",
@@ -1238,6 +1248,14 @@ function App() {
             <Images size={20} />
             <span className="tab-label">领图</span>
           </button>
+          <button
+            className={`tab-button ${activeTab === "orders" ? "active" : ""}`}
+            onClick={() => navigateTab("orders")}
+            title="下单确认"
+          >
+            <PackageCheck size={20} />
+            <span className="tab-label">下单确认</span>
+          </button>
         </nav>
 
         <div className="sidebar-system-card" aria-label="机器人系统状态">
@@ -1498,6 +1516,17 @@ function App() {
             claimDrawing={claimDrawing}
             completeDrawing={completeDrawing}
             queryDrawingClaims={queryDrawingClaims}
+          />
+        </React.Suspense>
+      )}
+
+      {activeTab === "orders" && (
+        <React.Suspense fallback={<div className="glass-skeleton assignment-skeleton" />}>
+          <OrderConfirmationCenter
+            configReady={configReady}
+            targetTable={targetTable}
+            setTargetTable={setTargetTable}
+            TableSelector={TableSelector}
           />
         </React.Suspense>
       )}
