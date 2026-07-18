@@ -38,12 +38,7 @@ function formatDateInput(date) {
 
 function defaultPerformanceRange() {
   const end = new Date();
-  const start = new Date(end);
-  const day = start.getDate();
-  start.setDate(1);
-  start.setMonth(start.getMonth() - 1);
-  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
-  start.setDate(Math.min(day, lastDay));
+  const start = new Date(end.getFullYear(), end.getMonth(), 1);
   return { startDate: formatDateInput(start), endDate: formatDateInput(end) };
 }
 
@@ -497,7 +492,7 @@ export default function HomeDashboard() {
                 max={todayInput}
                 onChange={(event) => setPerformanceRange((range) => ({ ...range, endDate: event.target.value }))}
               />
-              <button type="button" onClick={resetPerformanceRange} title="恢复最近一个月">近1月</button>
+              <button type="button" onClick={resetPerformanceRange} title="恢复本月范围">本月</button>
             </div>
           </div>
           <span />

@@ -187,16 +187,6 @@ function addDays(date, days) {
   return next;
 }
 
-function addMonthsClamped(date, months) {
-  const next = new Date(date);
-  const day = next.getDate();
-  next.setDate(1);
-  next.setMonth(next.getMonth() + months);
-  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-  next.setDate(Math.min(day, lastDay));
-  return next;
-}
-
 function parseDashboardDate(value, fallback) {
   const text = String(value || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
@@ -705,7 +695,7 @@ app.get("/api/home-dashboard", async (req, res) => {
     res.set("Expires", "0");
     const now = new Date();
     const today = formatDateInput(now);
-    const defaultRangeStart = formatDateInput(addMonthsClamped(now, -1));
+    const defaultRangeStart = formatDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
     const rangeEnd = parseDashboardDate(req.query.endDate, today);
     const rangeStart = parseDashboardDate(req.query.startDate, defaultRangeStart);
     if (rangeStart > rangeEnd) throw new Error("绩效统计开始日期不能晚于结束日期");
