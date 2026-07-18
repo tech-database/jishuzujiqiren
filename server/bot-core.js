@@ -679,6 +679,7 @@ function cleanDrawingCommandText(text) {
     .replace(/@\S+/g, " ")
     .replace(/\u9886\u56fe/g, " ")
     .replace(/\u7ed8\u56fe\u5b8c\u6210|\u5b8c\u6210\u56fe|\u56fe\u7eb8\u5b8c\u6210/g, " ")
+    .replace(/\u4e0b\u5355\u786e\u8ba4|\u786e\u8ba4\u4e0b\u5355/g, " ")
     .trim();
 }
 
