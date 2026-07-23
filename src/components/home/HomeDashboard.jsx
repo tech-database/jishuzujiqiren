@@ -327,20 +327,28 @@ export default function HomeDashboard() {
   const [now, setNow] = useState(new Date());
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== "hidden");
   const [performanceRange, setPerformanceRange] = useState(defaultPerformanceRange);
+  const [performanceLoading, setPerformanceLoading] = useState(true);
   const requestRef = useRef(null);
   const controllerRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const performanceRangeRef = useRef(performanceRange);
   const mountedRef = useRef(true);
 
-  const loadDashboard = useCallback(async () => {
-    if (requestRef.current) return requestRef.current;
+  const loadDashboard = useCallback(({ force = false } = {}) => {
+    if (requestRef.current && !force) return requestRef.current;
+    if (force) controllerRef.current?.abort();
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     const controller = new AbortController();
     controllerRef.current = controller;
+    const selectedRange = performanceRangeRef.current;
     const request = (async () => {
       try {
         const query = new URLSearchParams({
           refresh: String(Date.now()),
-          startDate: performanceRange.startDate,
-          endDate: performanceRange.endDate,
+          startDate: selectedRange.startDate,
+          endDate: selectedRange.endDate,
         });
         const response = await fetch(`/api/home-dashboard?${query}`, {
           signal: controller.signal,
@@ -349,26 +357,36 @@ export default function HomeDashboard() {
         });
         const result = await response.json();
         if (!result.ok) throw new Error(result.error || "首页数据加载失败");
-        if (mountedRef.current) {
+        if (mountedRef.current && requestId === requestIdRef.current) {
           setData(result);
           setError("");
         }
       } catch (requestError) {
-        if (requestError.name !== "AbortError" && mountedRef.current) {
+        if (
+          requestError.name !== "AbortError" &&
+          mountedRef.current &&
+          requestId === requestIdRef.current
+        ) {
           setError(requestError.message || "首页数据加载失败");
         }
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && requestId === requestIdRef.current) {
+          setLoading(false);
+          setPerformanceLoading(false);
+          requestRef.current = null;
+          if (controllerRef.current === controller) controllerRef.current = null;
+        }
       }
     })();
     requestRef.current = request;
-    try {
-      return await request;
-    } finally {
-      requestRef.current = null;
-      if (controllerRef.current === controller) controllerRef.current = null;
-    }
-  }, [performanceRange.endDate, performanceRange.startDate]);
+    return request;
+  }, []);
+
+  useEffect(() => {
+    performanceRangeRef.current = performanceRange;
+    setPerformanceLoading(true);
+    loadDashboard({ force: true });
+  }, [loadDashboard, performanceRange.endDate, performanceRange.startDate]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -493,11 +511,12 @@ export default function HomeDashboard() {
                 onChange={(event) => setPerformanceRange((range) => ({ ...range, endDate: event.target.value }))}
               />
               <button type="button" onClick={resetPerformanceRange} title="恢复本月范围">本月</button>
+              {performanceLoading && <em role="status">统计中</em>}
             </div>
           </div>
           <span />
         </div>
-        <section className="home-performance-grid">
+        <section className={`home-performance-grid ${performanceLoading ? "is-loading" : ""}`} aria-busy={performanceLoading}>
           <PerformancePanel title="胶板绩效" data={data?.performance?.board} tone="board" />
           <PerformancePanel title="油漆绩效" data={data?.performance?.paint} tone="paint" />
         </section>

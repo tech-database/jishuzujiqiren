@@ -510,6 +510,12 @@
   cursor: pointer;
 }
 .home-performance-range button:hover { border-color: #2488ec; background: #fff; }
+.home-performance-range em {
+  color: #2572c9;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+}
 
 .home-performance-grid {
   position: relative;
@@ -519,6 +525,7 @@
   gap: 12px;
   overflow: hidden;
 }
+.home-performance-grid.is-loading { opacity: .58; }
 
 .home-performance-panel {
   position: relative;
