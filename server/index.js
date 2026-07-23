@@ -39,6 +39,7 @@ const app = express();
 const port = Number(process.env.PORT || 8787);
 const envPath = path.join(rootDir, ".env");
 const statusSyncIntervalMs = Number(process.env.STATUS_SYNC_INTERVAL_MS || 10000);
+const feishuWebhookEnabled = process.env.FEISHU_WEBHOOK_ENABLED === "true";
 const websocketStatusPath = path.join(__dirname, ".runtime", "long-connection-status.json");
 const configWritePassword = process.env.CONFIG_WRITE_PASSWORD || "888888";
 const adminAccessPassword = process.env.ADMIN_ACCESS_PASSWORD || "888000";
@@ -836,6 +837,10 @@ app.post("/api/recalculate-drawing-durations", async (req, res) => {
 });
 
 app.post("/webhook/feishu", async (req, res) => {
+  if (!feishuWebhookEnabled) {
+    return res.status(404).json({ ok: false, error: "Not Found" });
+  }
+
   const body = req.body || {};
 
   if (body.type === "url_verification" && body.challenge) {
@@ -873,7 +878,11 @@ app.get("*", (_req, res) => {
 
 app.listen(port, () => {
   console.log(`Tech bot server: http://127.0.0.1:${port}`);
-  console.log(`Feishu webhook: http://127.0.0.1:${port}/webhook/feishu`);
+  console.log(
+    feishuWebhookEnabled
+      ? `Feishu webhook: http://127.0.0.1:${port}/webhook/feishu`
+      : "Feishu webhook: disabled",
+  );
   runBackgroundStatusSync("startup");
   setInterval(() => runBackgroundStatusSync("timer"), statusSyncIntervalMs);
 });

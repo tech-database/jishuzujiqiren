@@ -64,6 +64,7 @@ export function getConfigStatus() {
     ready: missing.length === 0,
     missing,
     webhookPath: "/webhook/feishu",
+    webhookEnabled: readRuntimeEnvValue("FEISHU_WEBHOOK_ENABLED") === "true",
     table: {
       appTokenSet: Boolean(readRuntimeEnvValue("FEISHU_BITABLE_APP_TOKEN")),
       tableIdSet: Boolean(readRuntimeEnvValue("FEISHU_BITABLE_TABLE_ID")),
