@@ -510,6 +510,10 @@
   cursor: pointer;
 }
 .home-performance-range button:hover { border-color: #2488ec; background: #fff; }
+.home-performance-range button:disabled { cursor: wait; opacity: .62; }
+.home-performance-range .home-force-refresh { display: inline-flex; align-items: center; gap: 4px; }
+.home-performance-range .home-force-refresh:not(:disabled):hover svg { transform: rotate(30deg); }
+.home-performance-range .home-force-refresh svg { transition: transform .18s ease; }
 .home-performance-range em {
   color: #2572c9;
   font-size: 11px;

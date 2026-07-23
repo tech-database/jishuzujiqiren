@@ -7,6 +7,7 @@ const requiredConfig = [
 
 import { readFileSync } from "node:fs";
 import { parse as parseDotenv } from "dotenv";
+import { feishuCache, feishuCacheTtl } from "./feishu-cache.js";
 
 const tableDefinitions = {
   board: {
@@ -576,36 +577,48 @@ export function extractTextFromFeishuEvent(body) {
 }
 
 export async function getTenantAccessToken() {
-  const response = await fetch(
-    "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        app_id: readRuntimeEnvValue("FEISHU_APP_ID"),
-        app_secret: readRuntimeEnvValue("FEISHU_APP_SECRET"),
-      }),
-    },
-  );
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    throw new Error(`Failed to get tenant_access_token: ${data.msg || response.statusText}`);
-  }
-  return data.tenant_access_token;
-}
-
-async function getBitableFieldMap(token, tableConfig = getBitableConfig()) {
-  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/fields?page_size=100`;
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const appId = readRuntimeEnvValue("FEISHU_APP_ID") || "";
+  return feishuCache.get(`token:${appId}`, {
+    ttlMs: feishuCacheTtl.token,
+    loader: async () => {
+      const response = await fetch(
+        "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            app_id: appId,
+            app_secret: readRuntimeEnvValue("FEISHU_APP_SECRET"),
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok || data.code !== 0) {
+        throw new Error(`Failed to get tenant_access_token: ${data.msg || response.statusText}`);
+      }
+      return data.tenant_access_token;
     },
   });
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    throw new Error(`Failed to list bitable fields: ${data.msg || response.statusText}`);
-  }
-  return new Map((data.data?.items || []).map((field) => [field.field_name, field.type]));
+}
+
+export async function getBitableFieldMap(token, tableConfig = getBitableConfig()) {
+  const cacheKey = `fields:${tableConfig.key}:${tableConfig.appToken}:${tableConfig.tableId}`;
+  return feishuCache.get(cacheKey, {
+    ttlMs: feishuCacheTtl.fields,
+    loader: async () => {
+      const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/fields?page_size=100`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (!response.ok || data.code !== 0) {
+        throw new Error(`Failed to list bitable fields: ${data.msg || response.statusText}`);
+      }
+      return new Map((data.data?.items || []).map((field) => [field.field_name, field.type]));
+    },
+  });
 }
 
 async function listBitableRecords(token, tableConfig = getBitableConfig()) {
@@ -635,6 +648,33 @@ async function listBitableRecords(token, tableConfig = getBitableConfig()) {
   return records;
 }
 
+async function listCachedBitableRecords(token, tableConfig = getBitableConfig()) {
+  const cacheKey = `records:${tableConfig.key}:${tableConfig.appToken}:${tableConfig.tableId}`;
+  return feishuCache.get(cacheKey, {
+    ttlMs: feishuCacheTtl.records,
+    loader: () => listBitableRecords(token, tableConfig),
+  });
+}
+
+export function invalidateBitableRecordCache(tableKey) {
+  if (!tableKey) {
+    return feishuCache.invalidatePrefix("records:");
+  }
+  const resolvedKey = resolveTableKey(tableKey);
+  return feishuCache.invalidatePrefix(`records:${resolvedKey}:`);
+}
+
+export function invalidateAllFeishuCaches() {
+  return feishuCache.clear();
+}
+
+export function getFeishuCacheStatus() {
+  return {
+    ...feishuCache.snapshot(),
+    ttlMs: { ...feishuCacheTtl },
+  };
+}
+
 async function updateBitableRecord(token, tableConfig, recordId, fields) {
   const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/${recordId}`;
   const response = await fetch(url, {
@@ -649,6 +689,7 @@ async function updateBitableRecord(token, tableConfig, recordId, fields) {
   if (!response.ok || data.code !== 0) {
     throw new Error(`Failed to update bitable record: ${data.msg || response.statusText} ${JSON.stringify(data)}`);
   }
+  invalidateBitableRecordCache(tableConfig.key);
   return data.data?.record;
 }
 
@@ -917,7 +958,7 @@ function recordFingerprint(record) {
 export async function getDrawingStatusFingerprint({ startDate, endDate, tableKey } = {}) {
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
-  const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate)
+  const records = filterRecordsByDateRange(await listCachedBitableRecords(token, tableConfig), startDate, endDate)
     .map(recordFingerprint)
     .sort((left, right) => left.recordId.localeCompare(right.recordId));
   return JSON.stringify(records);
@@ -1037,7 +1078,7 @@ export async function queryUnclaimedDrawings({ tableKey } = {}) {
   for (const key of drawingTableKeys(tableKey)) {
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
-    const records = await listBitableRecords(token, tableConfig);
+    const records = await listCachedBitableRecords(token, tableConfig);
     if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
     items.push(
       ...records
@@ -1069,7 +1110,7 @@ export async function queryDrawingOwnerStats({ tableKey } = {}) {
   for (const key of drawingTableKeys(tableKey)) {
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
-    const records = await listBitableRecords(token, tableConfig);
+    const records = await listCachedBitableRecords(token, tableConfig);
     if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
     totalRecords += records.length;
 
@@ -1144,7 +1185,7 @@ export async function queryHomeDashboardTable({ startDate, endDate, tableKey } =
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
   const records = filterRecordsByDateRange(
-    await listBitableRecords(token, tableConfig),
+    await listCachedBitableRecords(token, tableConfig),
     startDate,
     endDate,
   );
@@ -1211,7 +1252,7 @@ export async function queryDrawingAnalytics({ startDate, endDate, tableKey } = {
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
   const durationField = resolveDrawingDurationField(fieldTypes);
-  const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
+  const records = filterRecordsByDateRange(await listCachedBitableRecords(token, tableConfig), startDate, endDate);
 
   if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
 
@@ -1303,7 +1344,7 @@ export async function queryDrawingClaimStatus({ materialCodes, tableKey }) {
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
-  const records = await listBitableRecords(token, tableConfig);
+  const records = await listCachedBitableRecords(token, tableConfig);
   if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
 
   const { matchedRecords, missing } = matchDrawingRecordsByMaterialCodes(records, codes);
@@ -1659,6 +1700,7 @@ export async function createBitableRecords(records, { tableKey } = {}) {
     }
     const created = [data.data?.record];
     created.warnings = warnings;
+    invalidateBitableRecordCache(tableConfig.key);
     return created;
   }
 
@@ -1677,6 +1719,7 @@ export async function createBitableRecords(records, { tableKey } = {}) {
   }
   const created = data.data?.records || [];
   created.warnings = warnings;
+  invalidateBitableRecordCache(tableConfig.key);
   return created;
 }
 

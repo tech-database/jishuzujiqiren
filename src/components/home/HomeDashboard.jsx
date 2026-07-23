@@ -328,13 +328,14 @@ export default function HomeDashboard() {
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== "hidden");
   const [performanceRange, setPerformanceRange] = useState(defaultPerformanceRange);
   const [performanceLoading, setPerformanceLoading] = useState(true);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const requestRef = useRef(null);
   const controllerRef = useRef(null);
   const requestIdRef = useRef(0);
   const performanceRangeRef = useRef(performanceRange);
   const mountedRef = useRef(true);
 
-  const loadDashboard = useCallback(({ force = false } = {}) => {
+  const loadDashboard = useCallback(({ force = false, bypassCache = false } = {}) => {
     if (requestRef.current && !force) return requestRef.current;
     if (force) controllerRef.current?.abort();
 
@@ -350,6 +351,7 @@ export default function HomeDashboard() {
           startDate: selectedRange.startDate,
           endDate: selectedRange.endDate,
         });
+        if (bypassCache) query.set("forceRefresh", "1");
         const response = await fetch(`/api/home-dashboard?${query}`, {
           signal: controller.signal,
           cache: "no-store",
@@ -373,6 +375,7 @@ export default function HomeDashboard() {
         if (mountedRef.current && requestId === requestIdRef.current) {
           setLoading(false);
           setPerformanceLoading(false);
+          setManualRefreshing(false);
           requestRef.current = null;
           if (controllerRef.current === controller) controllerRef.current = null;
         }
@@ -451,6 +454,11 @@ export default function HomeDashboard() {
   const paint = data?.today?.paint?.summary || {};
   const todayInput = formatDateInput(now);
   const resetPerformanceRange = () => setPerformanceRange(defaultPerformanceRange());
+  const forceRefreshDashboard = () => {
+    setManualRefreshing(true);
+    setPerformanceLoading(true);
+    loadDashboard({ force: true, bypassCache: true });
+  };
 
   return (
     <div className={`home-page ${pageVisible ? "" : "is-paused"}`.trim()}>
@@ -472,7 +480,7 @@ export default function HomeDashboard() {
           </div>
         </header>
 
-        {error && <div className="home-error"><Activity size={18} />连接异常，已保留上次成功数据<button type="button" onClick={loadDashboard}>重新加载</button></div>}
+        {error && <div className="home-error"><Activity size={18} />连接异常，已保留上次成功数据<button type="button" onClick={() => loadDashboard({ force: true })}>重新加载</button></div>}
         <section className={`home-metrics ${loading ? "is-loading" : ""}`} aria-label="今日运行指标">
           <MetricCard index={0} icon={UsersRound} label="绘图人员" value={personnelSummary.owners} />
           <MetricCard index={1} icon={Activity} label="绘图中" value={personnelSummary.drawing} />
@@ -511,6 +519,16 @@ export default function HomeDashboard() {
                 onChange={(event) => setPerformanceRange((range) => ({ ...range, endDate: event.target.value }))}
               />
               <button type="button" onClick={resetPerformanceRange} title="恢复本月范围">本月</button>
+              <button
+                type="button"
+                className="home-force-refresh"
+                onClick={forceRefreshDashboard}
+                disabled={manualRefreshing}
+                title="绕过缓存，立即重新读取飞书表格"
+              >
+                <RefreshCw size={12} aria-hidden="true" />
+                {manualRefreshing ? "刷新中" : "刷新"}
+              </button>
               {performanceLoading && <em role="status">统计中</em>}
             </div>
           </div>

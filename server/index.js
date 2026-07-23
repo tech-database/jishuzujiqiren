@@ -16,7 +16,11 @@ import {
   getBitableConfig,
   getConfigStatus,
   getDrawingStatusFingerprint,
+  getFeishuCacheStatus,
+  getBitableFieldMap,
   getTenantAccessToken,
+  invalidateAllFeishuCaches,
+  invalidateBitableRecordCache,
   parseSpreadsheetBuffer,
   queryDrawingClaimStatus,
   queryDrawingAnalytics,
@@ -43,6 +47,8 @@ const adminSessionTtlMs = 8 * 60 * 60 * 1000;
 const adminSessions = new Map();
 const statusSyncRunningTables = new Set();
 let backgroundStatusCheckRunning = false;
+let lastDashboardForceRefreshAt = 0;
+const dashboardForceRefreshCooldownMs = 5000;
 const lastBackgroundFingerprints = {};
 const serverStartedAt = new Date().toISOString();
 const statusSyncInfo = {
@@ -221,19 +227,12 @@ async function replyToMessage(messageId, text) {
 
 async function checkBitableTable(token, tableKey) {
   const tableConfig = getBitableConfig(tableKey);
-  const fieldsUrl = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/fields?page_size=100`;
-  const response = await fetch(fieldsUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    throw new Error(data.msg || response.statusText);
-  }
+  const fields = await getBitableFieldMap(token, tableConfig);
   return {
     ok: true,
     table: tableConfig.key,
     label: tableConfig.label,
-    fieldCount: data.data?.items?.length || 0,
+    fieldCount: fields.size,
   };
 }
 
@@ -346,6 +345,7 @@ function applyRuntimeConfig(config) {
     FEISHU_REPLY_ENABLED: config.replyEnabled ? "true" : "false",
   };
   for (const [key, value] of Object.entries(entries)) process.env[key] = value;
+  invalidateAllFeishuCaches();
   return entries;
 }
 
@@ -700,6 +700,15 @@ app.get("/api/home-dashboard", async (req, res) => {
     const rangeStart = parseDashboardDate(req.query.startDate, defaultRangeStart);
     if (rangeStart > rangeEnd) throw new Error("绩效统计开始日期不能晚于结束日期");
     if (rangeEnd > today) throw new Error("绩效统计结束日期不能晚于今天");
+    const forceRefreshRequested = req.query.forceRefresh === "1";
+    const forceRefreshApplied =
+      forceRefreshRequested &&
+      now.getTime() - lastDashboardForceRefreshAt >= dashboardForceRefreshCooldownMs;
+    if (forceRefreshApplied) {
+      invalidateBitableRecordCache("board");
+      invalidateBitableRecordCache("paint");
+      lastDashboardForceRefreshAt = now.getTime();
+    }
     const [personnel, boardToday, paintToday, boardPerformance, paintPerformance, health] =
       await Promise.all([
         queryDrawingOwnerStats(),
@@ -765,6 +774,12 @@ app.get("/api/home-dashboard", async (req, res) => {
       today: { board: boardToday, paint: paintToday },
       performance: { board: boardPerformance, paint: paintPerformance },
       realtimeLogs,
+      cache: {
+        ...getFeishuCacheStatus(),
+        forceRefreshRequested,
+        forceRefreshApplied,
+        forceRefreshCooldownMs: dashboardForceRefreshCooldownMs,
+      },
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });

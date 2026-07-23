@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "test": "node --test server/*.test.js",
     "server": "node server/index.js",
     "feishu:ws": "node server/long-connection.js",
     "start": "node server/index.js"
