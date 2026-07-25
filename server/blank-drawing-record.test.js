@@ -29,7 +29,7 @@ function installFeishuMock() {
         code: 0,
         data: {
           items: [
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "绘图人", type: 1 },
             { field_name: "状态", type: 1 },
             { field_name: "日期", type: 5 },
@@ -51,7 +51,7 @@ function installFeishuMock() {
               record_id: "blank-template",
               fields: { 分值: 0, 绘图人: "模板人员", 状态: "绘图中" },
             },
-            { record_id: "real-task", fields: { 料号: "TASK-001" } },
+            { record_id: "real-task", fields: { 下单建料号: "TASK-001" } },
           ],
         },
       });
@@ -133,7 +133,7 @@ test("ignores blank template rows in every dashboard and status statistic", asyn
       "\u9886\u56fe\u5177\u4f53\u65f6\u95f4",
       "\u5b8c\u6210\u56fe\u5177\u4f53\u65f6\u95f4",
       "\u7528\u65f6\uff08\u5206\uff09",
-      "\u6599\u53f7",
+      "\u4e0b\u5355\u5efa\u6599\u53f7",
     ]);
     assert.equal(
       mock.searches.some(

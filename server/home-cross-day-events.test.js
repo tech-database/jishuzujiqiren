@@ -11,7 +11,7 @@ const fields = {
   status: "\u72b6\u6001",
   claimTime: "\u9886\u56fe\u5177\u4f53\u65f6\u95f4",
   completeTime: "\u5b8c\u6210\u56fe\u5177\u4f53\u65f6\u95f4",
-  material: "\u6599\u53f7",
+  material: "\u4e0b\u5355\u5efa\u6599\u53f7",
 };
 
 test("home realtime events include today's completion for a previous-day task", async () => {

@@ -24,7 +24,7 @@ test("historical full scan reports missing timestamps without backfilling them",
         code: 0,
         data: {
           items: [
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "绘图人", type: 1 },
             { field_name: "状态", type: 1 },
             { field_name: "领图具体时间", type: 5 },
@@ -42,7 +42,7 @@ test("historical full scan reports missing timestamps without backfilling them",
           items: [{
             record_id: "historical-done",
             fields: {
-              料号: "HIST-001",
+              下单建料号: "HIST-001",
               绘图人: "测试人员",
               状态: "绘图完成",
               领图具体时间: Date.parse("2026-07-01T01:00:00.000Z"),

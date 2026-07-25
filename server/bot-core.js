@@ -1158,7 +1158,7 @@ export function extractMaterialCodes(text) {
     .split(/[\s,\uFF0C\u3001\u3002;\uFF1B|/\\]+/)
     .map((token) =>
       token
-        .replace(/^(?:\u6599\u53f7|\u5efa\u6599\u53f7|\u56fe\u53f7)[:\uFF1A=]?/u, "")
+        .replace(/^(?:\u4e0b\u5355\u5efa\u6599\u53f7|\u6599\u53f7|\u5efa\u6599\u53f7|\u56fe\u53f7)[:\uFF1A=]?/u, "")
         .replace(/^[\[\]()\uFF08\uFF09\u3010\u3011"'“”‘’]+|[\[\]()\uFF08\uFF09\u3010\u3011"'“”‘’]+$/g, "")
         .trim(),
     )
@@ -1166,11 +1166,9 @@ export function extractMaterialCodes(text) {
   return [...new Set(tokens)];
 }
 
+const drawingMaterialField = "\u4e0b\u5355\u5efa\u6599\u53f7";
 const drawingMaterialFields = [
-  "\u4e0b\u5355\u5efa\u6599\u53f7",
-  "\u5efa\u6599\u53f7",
-  "\u6599\u53f7",
-  "\u56fe\u53f7",
+  drawingMaterialField,
 ];
 const drawingOwnerField = "\u7ed8\u56fe\u4eba";
 const drawingStatusField = "\u72b6\u6001";
@@ -1223,8 +1221,17 @@ function replaceDrawingOwnerRosterFromRecords(tableConfig, records) {
 }
 
 async function loadDrawingOwnerRosterTable(token, tableConfig) {
+  const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  if (!fieldTypes.has(drawingMaterialField)) {
+    throw new Error(`数据表缺少字段：${drawingMaterialField}`);
+  }
+  if (!fieldTypes.has(drawingOwnerField)) {
+    throw new Error(`数据表缺少字段：${drawingOwnerField}`);
+  }
   const records = await listBitableRecords(token, tableConfig, {
-    fieldNames: [drawingOwnerField, ...drawingMaterialFields],
+    fieldNames: [drawingOwnerField, ...drawingMaterialFields].filter((fieldName) =>
+      fieldTypes.has(fieldName),
+    ),
   });
   return replaceDrawingOwnerRosterFromRecords(tableConfig, records);
 }

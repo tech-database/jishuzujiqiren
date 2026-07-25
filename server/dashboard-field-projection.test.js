@@ -33,7 +33,7 @@ test("dashboard and analytics request only the fields they use", async () => {
             { field_name: "用时（分）", type: 2 },
             { field_name: "分值", type: 2 },
             { field_name: "区域", type: 1 },
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "附彩图", type: 17 },
             { field_name: "销售总价", type: 2 },
             { field_name: "注意事项/材质说明", type: 1 },
@@ -51,7 +51,7 @@ test("dashboard and analytics request only the fields they use", async () => {
             record_id: "record-1",
             fields: {
               日期: Date.parse("2026-07-25T00:00:00.000Z"),
-              料号: "TASK-001",
+              下单建料号: "TASK-001",
               绘图人: "测试人员",
               状态: "绘图中",
               分值: 5,
@@ -81,7 +81,7 @@ test("dashboard and analytics request only the fields they use", async () => {
       "状态",
       "领图具体时间",
       "完成图具体时间",
-      "料号",
+      "下单建料号",
     ]);
     assert.deepEqual(searches[1].field_names, searches[0].field_names);
     assert.deepEqual(searches[1].sort, [{ field_name: "\u65e5\u671f", desc: true }]);
@@ -91,7 +91,7 @@ test("dashboard and analytics request only the fields they use", async () => {
       "分值",
       "区域",
       "用时（分）",
-      "料号",
+      "下单建料号",
     ]);
     for (const search of searches) {
       assert.equal(search.field_names.includes("附彩图"), false);

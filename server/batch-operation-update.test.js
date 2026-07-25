@@ -4,7 +4,7 @@ import { completeDrawings, invalidateAllFeishuCaches } from "./bot-core.js";
 
 function drawingFields() {
   return [
-    { field_name: "料号", type: 1 },
+    { field_name: "下单建料号", type: 1 },
     { field_name: "绘图人", type: 1 },
     { field_name: "状态", type: 1 },
     { field_name: "完成图具体时间", type: 5 },
@@ -15,11 +15,11 @@ function openRecords() {
   return [
     {
       record_id: "record-a",
-      fields: { 料号: "BATCH-A", 绘图人: "测试人员", 状态: "绘图中" },
+      fields: { 下单建料号: "BATCH-A", 绘图人: "测试人员", 状态: "绘图中" },
     },
     {
       record_id: "record-b",
-      fields: { 料号: "BATCH-B", 绘图人: "测试人员", 状态: "绘图中" },
+      fields: { 下单建料号: "BATCH-B", 绘图人: "测试人员", 状态: "绘图中" },
     },
   ];
 }
@@ -96,7 +96,7 @@ test("rechecks records after a failed batch and reports the actual partial resul
           record: {
             record_id: recordId,
             fields: {
-              料号: recordId === "record-a" ? "BATCH-A" : "BATCH-B",
+              下单建料号: recordId === "record-a" ? "BATCH-A" : "BATCH-B",
               绘图人: "测试人员",
               状态: recordId === "record-a" ? "绘图完成" : "绘图中",
             },

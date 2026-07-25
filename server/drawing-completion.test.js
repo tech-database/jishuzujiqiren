@@ -22,7 +22,7 @@ test("does not overwrite an already completed drawing and updates an unfinished 
         code: 0,
         data: {
           items: [
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "绘图人", type: 1 },
             { field_name: "状态", type: 1 },
             { field_name: "完成图具体时间", type: 5 },
@@ -41,7 +41,7 @@ test("does not overwrite an already completed drawing and updates an unfinished 
             {
               record_id: "record-done",
               fields: {
-                料号: "DONE-001",
+                下单建料号: "DONE-001",
                 绘图人: "测试人员",
                 状态: "绘图完成",
                 日期: 1577836800000,
@@ -51,7 +51,7 @@ test("does not overwrite an already completed drawing and updates an unfinished 
             {
               record_id: "record-open",
               fields: {
-                料号: "OPEN-001",
+                下单建料号: "OPEN-001",
                 绘图人: "测试人员",
                 状态: "绘图中",
                 日期: 1577836800000,
@@ -122,7 +122,7 @@ test("requires a claim and the matching owner unless an administrator overrides"
         code: 0,
         data: {
           items: [
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "绘图人", type: 1 },
             { field_name: "状态", type: 1 },
             { field_name: "完成图具体时间", type: 5 },
@@ -138,16 +138,16 @@ test("requires a claim and the matching owner unless an administrator overrides"
           items: [
             {
               record_id: "record-unclaimed",
-              fields: { 料号: "UNCLAIMED-001", 状态: "未领取" },
+              fields: { 下单建料号: "UNCLAIMED-001", 状态: "未领取" },
             },
             {
               record_id: "record-other-owner",
-              fields: { 料号: "OTHER-001", 绘图人: "张三", 状态: "绘图中" },
+              fields: { 下单建料号: "OTHER-001", 绘图人: "张三", 状态: "绘图中" },
             },
             {
               record_id: "record-completed",
               fields: {
-                料号: "DONE-001",
+                下单建料号: "DONE-001",
                 绘图人: "张三",
                 状态: "绘图完成",
                 完成图具体时间: 1700000000000,
@@ -155,11 +155,11 @@ test("requires a claim and the matching owner unless an administrator overrides"
             },
             {
               record_id: "record-duplicate-1",
-              fields: { 料号: "DUP-001", 绘图人: "李四", 状态: "绘图中" },
+              fields: { 下单建料号: "DUP-001", 绘图人: "李四", 状态: "绘图中" },
             },
             {
               record_id: "record-duplicate-2",
-              fields: { 料号: "DUP-001", 绘图人: "李四", 状态: "绘图中" },
+              fields: { 下单建料号: "DUP-001", 绘图人: "李四", 状态: "绘图中" },
             },
           ],
         },

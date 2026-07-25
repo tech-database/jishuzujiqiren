@@ -7,7 +7,7 @@ import {
 } from "./bot-core.js";
 
 const fieldNames = {
-  material: "\u6599\u53f7",
+  material: "\u4e0b\u5355\u5efa\u6599\u53f7",
   owner: "\u7ed8\u56fe\u4eba",
   status: "\u72b6\u6001",
   date: "\u65e5\u671f",

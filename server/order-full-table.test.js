@@ -23,7 +23,7 @@ test("order confirmation continues through all pages instead of stopping at 500 
         code: 0,
         data: {
           items: [
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "是否下单", type: 1 },
             { field_name: "附彩图", type: 17 },
             { field_name: "销售总价", type: 2 },
@@ -43,7 +43,7 @@ test("order confirmation continues through all pages instead of stopping at 500 
               items: [
                 {
                   record_id: "target-on-second-page",
-                  fields: { 料号: "ORDER-001", 是否下单: "" },
+                  fields: { 下单建料号: "ORDER-001", 是否下单: "" },
                 },
               ],
             }
@@ -53,7 +53,7 @@ test("order confirmation continues through all pages instead of stopping at 500 
               items: [
                 {
                   record_id: "other-on-first-page",
-                  fields: { 料号: "OTHER-001", 是否下单: "" },
+                  fields: { 下单建料号: "OTHER-001", 是否下单: "" },
                 },
               ],
             },
@@ -76,8 +76,8 @@ test("order confirmation continues through all pages instead of stopping at 500 
     assert.deepEqual(
       searchBodies.map((body) => body.field_names),
       [
-        ["料号", "是否下单"],
-        ["料号", "是否下单"],
+        ["下单建料号", "是否下单"],
+        ["下单建料号", "是否下单"],
       ],
     );
     assert.equal(updates.length, 1);
@@ -109,7 +109,7 @@ test("order confirmation rejects duplicate material codes across pages before wr
         code: 0,
         data: {
           items: [
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "是否下单", type: 1 },
           ],
         },
@@ -124,7 +124,7 @@ test("order confirmation rejects duplicate material codes across pages before wr
               has_more: false,
               items: [{
                 record_id: "duplicate-second-page",
-                fields: { 料号: "ORDER-DUP", 是否下单: "" },
+                fields: { 下单建料号: "ORDER-DUP", 是否下单: "" },
               }],
             }
           : {
@@ -132,7 +132,7 @@ test("order confirmation rejects duplicate material codes across pages before wr
               page_token: "next-page",
               items: [{
                 record_id: "duplicate-first-page",
-                fields: { 料号: "ORDER-DUP", 是否下单: "" },
+                fields: { 下单建料号: "ORDER-DUP", 是否下单: "" },
               }],
             },
       });

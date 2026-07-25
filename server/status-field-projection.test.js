@@ -31,7 +31,7 @@ test("status detection reads only fields that can affect drawing status", async 
             { field_name: "领图具体时间", type: 1 },
             { field_name: "完成图具体时间", type: 1 },
             { field_name: "用时（分）", type: 2 },
-            { field_name: "料号", type: 1 },
+            { field_name: "下单建料号", type: 1 },
             { field_name: "附彩图", type: 17 },
             { field_name: "销售总价", type: 2 },
             { field_name: "注意事项/材质说明", type: 1 },
@@ -49,7 +49,7 @@ test("status detection reads only fields that can affect drawing status", async 
             record_id: "record-1",
             fields: {
               日期: Date.parse("2026-07-24T00:00:00.000Z"),
-              料号: "TASK-001",
+              下单建料号: "TASK-001",
               状态: "未领取",
             },
           }],
@@ -77,7 +77,7 @@ test("status detection reads only fields that can affect drawing status", async 
         "领图具体时间",
         "完成图具体时间",
         "用时（分）",
-        "料号",
+        "下单建料号",
       ]);
       assert.equal(search.field_names.includes("附彩图"), false);
       assert.equal(search.field_names.includes("销售总价"), false);

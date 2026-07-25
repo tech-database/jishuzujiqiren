@@ -22,7 +22,7 @@ function installFeishuMock(records, { includeOwner = false } = {}) {
     }
     if (requestUrl.includes("/fields?")) {
       const items = [
-        { field_name: "料号", type: 1 },
+        { field_name: "下单建料号", type: 1 },
         { field_name: "状态", type: 1 },
         { field_name: "日期", type: 5 },
       ];
@@ -64,17 +64,17 @@ function installFeishuMock(records, { includeOwner = false } = {}) {
 test("blocks an upload when its material code already exists in the target table", async () => {
   invalidateAllFeishuCaches();
   const mock = installFeishuMock([
-    { record_id: "existing-record", fields: { 料号: "DUP-001" } },
+    { record_id: "existing-record", fields: { 下单建料号: "DUP-001" } },
   ]);
 
   try {
     await assert.rejects(
-      createBitableRecords([{ 料号: "DUP-001" }], { tableKey: "board" }),
+      createBitableRecords([{ 下单建料号: "DUP-001" }], { tableKey: "board" }),
       /胶板表最近500条中已存在相同料号：DUP-001/,
     );
     assert.equal(mock.writes.length, 0);
     assert.equal(mock.searches.length, 1);
-    assert.deepEqual(mock.searches[0].field_names, ["料号"]);
+    assert.deepEqual(mock.searches[0].field_names, ["下单建料号"]);
     assert.deepEqual(mock.searches[0].sort, [{ field_name: "日期", desc: true }]);
   } finally {
     mock.restore();
@@ -85,8 +85,8 @@ test("blocks a drawing claim when one material code matches multiple records", a
   invalidateAllFeishuCaches();
   const mock = installFeishuMock(
     [
-      { record_id: "duplicate-1", fields: { 料号: "DUP-002", 绘图人: "", 日期: 1577836800000 } },
-      { record_id: "duplicate-2", fields: { 料号: "DUP-002", 绘图人: "", 日期: 1577836800000 } },
+      { record_id: "duplicate-1", fields: { 下单建料号: "DUP-002", 绘图人: "", 日期: 1577836800000 } },
+      { record_id: "duplicate-2", fields: { 下单建料号: "DUP-002", 绘图人: "", 日期: 1577836800000 } },
     ],
     { includeOwner: true },
   );
@@ -136,7 +136,7 @@ test("always writes today's date instead of a date supplied by the spreadsheet",
 
   try {
     await createBitableRecords(
-      [{ 料号: "NEW-001", 日期: "2020-01-02" }],
+      [{ 下单建料号: "NEW-001", 日期: "2020-01-02" }],
       { tableKey: "board" },
     );
 
