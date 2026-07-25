@@ -8,6 +8,13 @@ const requiredConfig = [
 import { readFileSync } from "node:fs";
 import { parse as parseDotenv } from "dotenv";
 import { feishuCache, feishuCacheTtl } from "./feishu-cache.js";
+import { calculateDrawingWorkDurationMinutes } from "./drawing-work-duration.js";
+import {
+  formatShanghaiDate,
+  formatShanghaiDateTime,
+  parseShanghaiDateBoundary,
+  parseShanghaiDateTime,
+} from "./date-range.js";
 
 const tableDefinitions = {
   board: {
@@ -26,10 +33,25 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const envFileUrl = new URL("../.env", import.meta.url);
+export const spreadsheetLimits = Object.freeze({
+  fileBytes: 50 * 1024 * 1024,
+  uncompressedBytes: 512 * 1024 * 1024,
+  archiveEntries: 5000,
+  rows: 100000,
+  importRows: 200,
+  columns: 500,
+  cells: 2_000_000,
+});
+export const feishuRequestTimeoutMs = Object.freeze({
+  standard: 180 * 1000,
+  batchWrite: 300 * 1000,
+  mediaUpload: 360 * 1000,
+});
 
 function readRuntimeEnvValue(key) {
   try {
@@ -180,23 +202,33 @@ function parseDateToTimestamp(value) {
   if (typeof value === "number") return value;
   const text = String(value || "").trim();
   if (!text) return "";
-  const normalized = text.replace(/\./g, "/").replace(/-/g, "/");
-  const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
-  if (!match) return value;
-  const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
-  return new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hour),
-    Number(minute),
-    Number(second),
-  ).getTime();
+  return parseShanghaiDateTime(text) ?? value;
+}
+
+function shanghaiTodayParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  };
 }
 
 function todayDateTimestamp() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const { year, month, day } = shanghaiTodayParts();
+  return Date.UTC(year, month - 1, day) - 8 * 60 * 60 * 1000;
+}
+
+function todayDateValue(fieldType) {
+  if (fieldType === 5) return todayDateTimestamp();
+  const { year, month, day } = shanghaiTodayParts();
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function applyFieldMap(fields) {
@@ -323,7 +355,7 @@ function parseKeyValueRecord(source) {
 
 function parseMessageToRecords(text) {
   const source = stripCommand(text);
-  if (!source) throw new Error("Empty message.");
+  if (!source) throw new Error("消息内容为空。");
 
   try {
     const parsed = JSON.parse(source);
@@ -342,42 +374,114 @@ function parseMessageToRecords(text) {
   const record = parseKeyValueRecord(source);
   if (record) return [record];
 
-  throw new Error('Invalid format. Paste a table, JSON, or "field: value" lines.');
+  throw new Error("消息格式无效，请粘贴表格、JSON，或按“字段：内容”格式发送。");
 }
 
-export async function parseSpreadsheetBuffer(buffer) {
-  const XLSX = await import("xlsx");
-  const xlsxBuffer = await normalizeSpreadsheetBuffer(buffer);
-  const imageMap = await extractWpsCellImages(xlsxBuffer);
-  const workbook = XLSX.read(xlsxBuffer, { type: "buffer", cellDates: false });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) throw new Error("Spreadsheet has no sheets.");
+export async function parseSpreadsheetBuffer(buffer, { fileName = "" } = {}) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error("上传的表格文件为空。");
+  if (buffer.length > spreadsheetLimits.fileBytes) {
+    throw new Error(`上传的表格超过 ${spreadsheetLimits.fileBytes / 1024 / 1024}MB 大小限制。`);
+  }
 
-  const matrix = sheetToMatrix(XLSX, workbook.Sheets[sheetName], imageMap);
+  const ExcelJS = (await import("exceljs")).default;
+  const format = detectSpreadsheetFormat(buffer, fileName);
+  const workbook = new ExcelJS.Workbook();
+  let imageMap = new Map();
+
+  if (format === "csv") {
+    await workbook.csv.read(Readable.from([buffer]));
+  } else if (format === "xls" && process.platform !== "win32") {
+    return parseLegacySpreadsheetBuffer(buffer);
+  } else {
+    let xlsxBuffer = buffer;
+    if (format === "xls") {
+      try {
+        xlsxBuffer = await convertLegacySpreadsheetToXlsx(buffer);
+      } catch (error) {
+        console.warn(`Excel/WPS conversion failed; using legacy .xls fallback: ${error.message}`);
+        return parseLegacySpreadsheetBuffer(buffer);
+      }
+    }
+    const zip = await loadSpreadsheetArchive(xlsxBuffer);
+    imageMap = await extractWpsCellImages(zip);
+    await workbook.xlsx.load(xlsxBuffer, {
+      ignoreNodes: ["dataValidations", "extLst"],
+    });
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) throw new Error("上传的表格中没有工作表。");
+  assertWorksheetLimits(sheet);
+
+  const matrix = sheetToMatrix(sheet, imageMap);
+  return recordsFromSpreadsheetMatrix(matrix);
+}
+
+function recordsFromSpreadsheetMatrix(matrix) {
   const fieldMap = readFieldMap();
   const fieldNames = new Set([...Object.keys(fieldMap), ...Object.values(fieldMap)]);
   const headerIndex = findHeaderRowIndex(matrix, fieldNames);
-  if (headerIndex < 0) throw new Error("Spreadsheet header row was not found.");
+  if (headerIndex < 0) throw new Error("未在表格中找到标题行。");
 
   const headers = matrix[headerIndex].map((cell) => String(cell || "").trim());
   const sheetMeta = extractQuoteSheetMeta(matrix, headerIndex);
   const dataRows = matrix
     .slice(headerIndex + 1)
     .filter((row) => isSpreadsheetDataRow(headers, row));
-  if (dataRows.length === 0) throw new Error("Spreadsheet has no data rows.");
+  if (dataRows.length === 0) throw new Error("表格中没有可写入的数据行。");
+  if (dataRows.length > spreadsheetLimits.importRows) {
+    throw new Error(
+      `清单共有 ${dataRows.length} 行，单次最多允许 ${spreadsheetLimits.importRows} 行，请拆分文件后重试。`,
+    );
+  }
 
   return dataRows.map((row) => rowToRecord(headers, row, sheetMeta));
 }
 
-async function normalizeSpreadsheetBuffer(buffer) {
-  if (buffer.subarray(0, 2).toString("hex") === "504b") return buffer;
-  console.log("Legacy Excel format detected. Trying local Excel/WPS conversion to xlsx.");
-  try {
-    return await convertLegacySpreadsheetToXlsx(buffer);
-  } catch (error) {
-    console.log(`Legacy conversion failed, parsing data without embedded images: ${error.message}`);
-    return buffer;
+export async function parseLegacySpreadsheetBuffer(buffer) {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(buffer, {
+    type: "buffer",
+    cellDates: false,
+    cellFormula: true,
+    cellHTML: false,
+    cellStyles: false,
+  });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error("上传的表格中没有工作表。");
+  const sheet = workbook.Sheets[sheetName];
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
+  const rowCount = range.e.r - range.s.r + 1;
+  const columnCount = range.e.c - range.s.c + 1;
+  assertSpreadsheetDimensions(rowCount, columnCount);
+
+  const matrix = [];
+  for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+    const row = [];
+    for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+      const cell = sheet[address];
+      row.push(cell?.f ? `=${cell.f}` : cell?.w ?? cell?.v ?? "");
+    }
+    matrix.push(row);
   }
+
+  const records = recordsFromSpreadsheetMatrix(matrix);
+  records.warnings = ["旧版 .xls 已使用兼容模式读取，内嵌图片可能无法提取。"];
+  return records;
+}
+
+function detectSpreadsheetFormat(buffer, fileName) {
+  const extension = String(fileName || "").trim().toLowerCase().match(/\.[^.]+$/)?.[0] || "";
+  if (extension && ![".xlsx", ".xls", ".csv"].includes(extension)) {
+    throw new Error("不支持该表格格式，仅支持 .xlsx、.xls 和 .csv 文件。");
+  }
+  if (extension === ".csv") return "csv";
+  if (buffer.subarray(0, 2).toString("hex") === "504b") return "xlsx";
+  if (buffer.subarray(0, 8).toString("hex") === "d0cf11e0a1b11ae1") return "xls";
+  if (extension === ".xls") return "xls";
+  if (extension === ".xlsx") throw new Error(".xlsx 文件内容无效或已经损坏。");
+  return "csv";
 }
 
 async function convertLegacySpreadsheetToXlsx(buffer) {
@@ -393,7 +497,9 @@ $app = $null
 try {
   try { $app = New-Object -ComObject Excel.Application } catch { $app = New-Object -ComObject Ket.Application }
   $app.DisplayAlerts = $false
-  $workbook = $app.Workbooks.Open($inputPath)
+  try { $app.AutomationSecurity = 3 } catch {}
+  try { $app.AskToUpdateLinks = $false } catch {}
+  $workbook = $app.Workbooks.Open($inputPath, 0, $true)
   $workbook.SaveAs($outputPath, 51)
   $workbook.Close($false)
 } finally {
@@ -411,15 +517,39 @@ try {
   }
 }
 
-function sheetToMatrix(XLSX, sheet, imageMap) {
-  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
+function assertWorksheetLimits(sheet) {
+  const rowCount = Number(sheet.rowCount || 0);
+  const columnCount = Number(sheet.columnCount || 0);
+  assertSpreadsheetDimensions(rowCount, columnCount);
+}
+
+function assertSpreadsheetDimensions(rowCount, columnCount) {
+  if (rowCount > spreadsheetLimits.rows) {
+    throw new Error(`表格行数过多（${rowCount} 行），最多允许 ${spreadsheetLimits.rows} 行。`);
+  }
+  if (columnCount > spreadsheetLimits.columns) {
+    throw new Error(`表格列数过多（${columnCount} 列），最多允许 ${spreadsheetLimits.columns} 列。`);
+  }
+  if (rowCount * columnCount > spreadsheetLimits.cells) {
+    throw new Error(`表格单元格数量过多，最多允许 ${spreadsheetLimits.cells} 个单元格。`);
+  }
+}
+
+function excelJsCellValue(cell) {
+  if (cell.formula) return `=${cell.formula}`;
+  if (cell.value === null || cell.value === undefined) return "";
+  if (cell.value instanceof Date) return cell.text || cell.value.toISOString();
+  return cell.text !== undefined && cell.text !== "" ? cell.text : cell.value;
+}
+
+function sheetToMatrix(sheet, imageMap) {
   const rows = [];
-  for (let r = range.s.r; r <= range.e.r; r += 1) {
+  const rowCount = Number(sheet.rowCount || 0);
+  const columnCount = Number(sheet.columnCount || 0);
+  for (let r = 1; r <= rowCount; r += 1) {
     const row = [];
-    for (let c = range.s.c; c <= range.e.c; c += 1) {
-      const address = XLSX.utils.encode_cell({ r, c });
-      const cell = sheet[address];
-      const value = cell?.f ? `=${cell.f}` : cell?.w ?? cell?.v ?? "";
+    for (let c = 1; c <= columnCount; c += 1) {
+      const value = excelJsCellValue(sheet.getCell(r, c));
       const imageId = parseDispimgId(value);
       row.push(imageId ? makeImageValue(imageId, imageMap.get(imageId), value) : value);
     }
@@ -428,13 +558,24 @@ function sheetToMatrix(XLSX, sheet, imageMap) {
   return rows;
 }
 
-async function extractWpsCellImages(buffer) {
-  if (buffer.subarray(0, 2).toString("hex") !== "504b") {
-    console.log("Spreadsheet is not zip-based xlsx; embedded image extraction is skipped.");
-    return new Map();
-  }
+async function loadSpreadsheetArchive(buffer) {
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(buffer);
+  const files = Object.values(zip.files);
+  if (files.length > spreadsheetLimits.archiveEntries) {
+    throw new Error(`表格压缩内容条目过多（${files.length} 个）。`);
+  }
+  let uncompressedBytes = 0;
+  for (const file of files) {
+    uncompressedBytes += Number(file?._data?.uncompressedSize || 0);
+    if (uncompressedBytes > spreadsheetLimits.uncompressedBytes) {
+      throw new Error("表格解压后的内容超过安全处理限制。");
+    }
+  }
+  return zip;
+}
+
+async function extractWpsCellImages(zip) {
   const relsXml = await zip.file("xl/_rels/cellimages.xml.rels")?.async("string");
   const cellImagesXml = await zip.file("xl/cellimages.xml")?.async("string");
   if (!relsXml || !cellImagesXml) return new Map();
@@ -571,18 +712,45 @@ export function extractTextFromFeishuEvent(body) {
   const message = body?.event?.message || body?.event?.message_event?.message;
   if (!message) return "";
   if (message.message_type && message.message_type !== "text") {
-    throw new Error(`Only text messages are supported, got ${message.message_type}.`);
+    throw new Error(`当前只支持文字消息，收到的消息类型为：${message.message_type}。`);
   }
   const content = typeof message.content === "string" ? JSON.parse(message.content) : message.content;
   return content?.text || "";
 }
 
+export async function fetchFeishuJsonWithTimeout(
+  url,
+  options = {},
+  timeoutMs = feishuRequestTimeoutMs.standard,
+) {
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const abortFromExternalSignal = () => controller.abort(externalSignal.reason);
+  if (externalSignal?.aborted) abortFromExternalSignal();
+  else externalSignal?.addEventListener("abort", abortFromExternalSignal, { once: true });
+
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const data = await response.json();
+    return { response, data };
+  } catch (error) {
+    if (controller.signal.aborted && !externalSignal?.aborted) {
+      throw new Error(`飞书接口响应超时（${Math.ceil(timeoutMs / 1000)}秒），请重试`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", abortFromExternalSignal);
+  }
+}
+
 export async function getTenantAccessToken() {
   const appId = readRuntimeEnvValue("FEISHU_APP_ID") || "";
-  return feishuCache.get(`token:${appId}`, {
-    ttlMs: feishuCacheTtl.token,
+  const tokenInfo = await feishuCache.get(`token:${appId}`, {
+    ttlMs: (value) => value.ttlMs,
     loader: async () => {
-      const response = await fetch(
+      const { response, data } = await fetchFeishuJsonWithTimeout(
         "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
         {
           method: "POST",
@@ -593,13 +761,61 @@ export async function getTenantAccessToken() {
           }),
         },
       );
-      const data = await response.json();
       if (!response.ok || data.code !== 0) {
-        throw new Error(`Failed to get tenant_access_token: ${data.msg || response.statusText}`);
+        throw new Error("获取飞书访问凭证失败，请稍后重试。");
       }
-      return data.tenant_access_token;
+      return {
+        token: data.tenant_access_token,
+        ttlMs: calculateTenantTokenTtlMs(data.expire),
+      };
     },
   });
+  return tokenInfo.token;
+}
+
+export function calculateTenantTokenTtlMs(expireSeconds) {
+  const expiresMs = Number(expireSeconds) * 1000;
+  if (!Number.isFinite(expiresMs) || expiresMs <= 0) return feishuCacheTtl.token;
+  if (expiresMs <= feishuCacheTtl.tokenRefreshBuffer) {
+    return Math.max(1000, Math.floor(expiresMs / 2));
+  }
+  return expiresMs - feishuCacheTtl.tokenRefreshBuffer;
+}
+
+export function invalidateTenantAccessTokenCache() {
+  return feishuCache.invalidatePrefix("token:");
+}
+
+const invalidTenantTokenCodes = new Set([99991661, 99991663, 99991664]);
+
+function hasInvalidTenantToken(response, data) {
+  if (response.status === 401) return true;
+  if (invalidTenantTokenCodes.has(Number(data?.code))) return true;
+  return /tenant[_ ]access[_ ]token/i.test(String(data?.msg || "")) &&
+    /invalid|expired|expire|失效|过期/i.test(String(data?.msg || ""));
+}
+
+export async function fetchFeishuJson(url, options = {}) {
+  const {
+    timeoutMs = feishuRequestTimeoutMs.standard,
+    ...requestOptions
+  } = options;
+  const execute = async () => {
+    const headers = new Headers(requestOptions.headers || {});
+    headers.set("Authorization", `Bearer ${await getTenantAccessToken()}`);
+    return fetchFeishuJsonWithTimeout(
+      url,
+      { ...requestOptions, headers },
+      timeoutMs,
+    );
+  };
+
+  let result = await execute();
+  if (hasInvalidTenantToken(result.response, result.data)) {
+    invalidateTenantAccessTokenCache();
+    result = await execute();
+  }
+  return result;
 }
 
 export async function getBitableFieldMap(token, tableConfig = getBitableConfig()) {
@@ -608,39 +824,78 @@ export async function getBitableFieldMap(token, tableConfig = getBitableConfig()
     ttlMs: feishuCacheTtl.fields,
     loader: async () => {
       const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/fields?page_size=100`;
-      const response = await fetch(url, {
+      const { response, data } = await fetchFeishuJson(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      const data = await response.json();
       if (!response.ok || data.code !== 0) {
-        throw new Error(`Failed to list bitable fields: ${data.msg || response.statusText}`);
+        throw new Error("读取飞书多维表字段失败，请稍后重试。");
       }
       return new Map((data.data?.items || []).map((field) => [field.field_name, field.type]));
     },
   });
 }
 
-async function listBitableRecords(token, tableConfig = getBitableConfig()) {
+export function buildBitableRecordSearchBody({
+  startDate,
+  endDate,
+  dateFieldName = drawingDateField,
+  fieldNames,
+  filterConditions,
+  filterConjunction = "and",
+} = {}) {
+  const body = {};
+  if (Array.isArray(fieldNames) && fieldNames.length > 0) body.field_names = fieldNames;
+  const conditions = Array.isArray(filterConditions)
+    ? filterConditions
+        .filter((condition) => condition?.field_name && condition?.operator)
+        .map((condition) => ({ ...condition }))
+    : [];
+  const startTime = parseDateBoundary(startDate);
+  const endTime = parseDateBoundary(endDate, true);
+  if (startTime) {
+    conditions.push({
+      field_name: dateFieldName,
+      operator: "isGreater",
+      value: ["ExactDate", String(startTime - 1)],
+    });
+  }
+  if (endTime) {
+    conditions.push({
+      field_name: dateFieldName,
+      operator: "isLess",
+      value: ["ExactDate", String(endTime + 1)],
+    });
+  }
+  if (conditions.length > 0) {
+    body.filter = {
+      conjunction: filterConjunction === "or" ? "or" : "and",
+      conditions,
+    };
+  }
+  return body;
+}
+
+async function listBitableRecords(token, tableConfig = getBitableConfig(), options = {}) {
   const records = [];
   let pageToken = "";
+  const requestBody = buildBitableRecordSearchBody(options);
 
   do {
     const searchParams = new URLSearchParams({ page_size: "500" });
     if (pageToken) searchParams.set("page_token", pageToken);
     const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/search?${searchParams.toString()}`;
-    const response = await fetch(url, {
+    const { response, data } = await fetchFeishuJson(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json; charset=utf-8",
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify(requestBody),
     });
-    const data = await response.json();
     if (!response.ok || data.code !== 0) {
-      throw new Error(`Failed to search bitable records: ${data.msg || response.statusText} ${JSON.stringify(data)}`);
+      throw new Error("查询飞书多维表记录失败，请稍后重试。");
     }
     records.push(...(data.data?.items || []));
     pageToken = data.data?.has_more ? data.data?.page_token || "" : "";
@@ -649,11 +904,65 @@ async function listBitableRecords(token, tableConfig = getBitableConfig()) {
   return records;
 }
 
-async function listCachedBitableRecords(token, tableConfig = getBitableConfig()) {
-  const cacheKey = `records:${tableConfig.key}:${tableConfig.appToken}:${tableConfig.tableId}`;
+async function listRecentBitableRecords(
+  token,
+  tableConfig = getBitableConfig(),
+  fieldTypes = new Map(),
+  { limit = 500, fieldNames } = {},
+) {
+  const searchParams = new URLSearchParams({ page_size: String(limit) });
+  const requestBody = {};
+  const selectedFields = Array.isArray(fieldNames)
+    ? fieldNames.filter((fieldName) => fieldTypes.has(fieldName))
+    : [];
+  if (selectedFields.length > 0) requestBody.field_names = selectedFields;
+  if (fieldTypes.has(drawingDateField)) {
+    requestBody.sort = [{ field_name: drawingDateField, desc: true }];
+  }
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/search?${searchParams.toString()}`;
+  const { response, data } = await fetchFeishuJson(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify(requestBody),
+  });
+  if (!response.ok || data.code !== 0) {
+    throw new Error("查询飞书多维表最近记录失败，请稍后重试。");
+  }
+  return data.data?.items || [];
+}
+
+async function listCachedRecentBitableRecords(
+  token,
+  tableConfig,
+  fieldTypes,
+  options = {},
+) {
+  const limit = Math.min(Math.max(Number(options.limit) || 500, 1), 500);
+  const fieldKey = Array.isArray(options.fieldNames) ? options.fieldNames.join(",") : "";
+  const cacheKey = `records:${tableConfig.key}:recent:${tableConfig.appToken}:${tableConfig.tableId}:${limit}:${fieldKey}`;
   return feishuCache.get(cacheKey, {
     ttlMs: feishuCacheTtl.records,
-    loader: () => listBitableRecords(token, tableConfig),
+    loader: () => listRecentBitableRecords(token, tableConfig, fieldTypes, {
+      ...options,
+      limit,
+    }),
+  });
+}
+
+async function listCachedBitableRecords(token, tableConfig = getBitableConfig(), options = {}) {
+  const rangeKey = `${options.startDate || ""}:${options.endDate || ""}`;
+  const dateFieldKey = options.dateFieldName || "";
+  const fieldKey = Array.isArray(options.fieldNames) ? options.fieldNames.join(",") : "";
+  const filterKey = Array.isArray(options.filterConditions)
+    ? JSON.stringify(options.filterConditions)
+    : "";
+  const cacheKey = `records:${tableConfig.key}:${tableConfig.appToken}:${tableConfig.tableId}:${rangeKey}:${dateFieldKey}:${fieldKey}:${options.filterConjunction || "and"}:${filterKey}`;
+  return feishuCache.get(cacheKey, {
+    ttlMs: feishuCacheTtl.records,
+    loader: () => listBitableRecords(token, tableConfig, options),
   });
 }
 
@@ -678,7 +987,7 @@ export function getFeishuCacheStatus() {
 
 async function updateBitableRecord(token, tableConfig, recordId, fields) {
   const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/${recordId}`;
-  const response = await fetch(url, {
+  const { response, data } = await fetchFeishuJson(url, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -686,12 +995,113 @@ async function updateBitableRecord(token, tableConfig, recordId, fields) {
     },
     body: JSON.stringify({ fields }),
   });
-  const data = await response.json();
   if (!response.ok || data.code !== 0) {
-    throw new Error(`Failed to update bitable record: ${data.msg || response.statusText} ${JSON.stringify(data)}`);
+    throw new Error("更新飞书多维表记录失败，请稍后重试。");
   }
   invalidateBitableRecordCache(tableConfig.key);
   return data.data?.record;
+}
+
+async function getBitableRecord(token, tableConfig, recordId) {
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/${recordId}`;
+  const { response, data } = await fetchFeishuJson(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok || data.code !== 0) {
+    throw new Error("读取飞书多维表记录失败，请稍后重试。");
+  }
+  return data.data?.record;
+}
+
+async function updateBitableRecordBatch(token, tableConfig, plans) {
+  if (plans.length === 1) {
+    await updateBitableRecord(token, tableConfig, plans[0].recordId, plans[0].fields);
+    return;
+  }
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/batch_update`;
+  const { response, data } = await fetchFeishuJson(url, {
+    method: "POST",
+    timeoutMs: feishuRequestTimeoutMs.batchWrite,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify({
+      records: plans.map((plan) => ({
+        record_id: plan.recordId,
+        fields: plan.fields,
+      })),
+    }),
+  });
+  if (!response.ok || data.code !== 0) {
+    throw new Error("批量更新飞书多维表记录失败，请稍后重试。");
+  }
+  invalidateBitableRecordCache(tableConfig.key);
+}
+
+async function executeVerifiedUpdatePlans(token, plans) {
+  if (plans.length === 0) return { applied: [], failed: [], errors: [] };
+  const groups = new Map();
+  for (const plan of plans) {
+    const group = groups.get(plan.tableConfig.key) || [];
+    group.push(plan);
+    groups.set(plan.tableConfig.key, group);
+  }
+  const tableBatches = [...groups.values()].map((group) => {
+    const chunks = [];
+    for (let index = 0; index < group.length; index += 500) {
+      chunks.push(group.slice(index, index + 500));
+    }
+    return chunks;
+  });
+
+  const applied = [];
+  const failed = [];
+  const errors = [];
+  const outcomeGroups = await Promise.all(
+    tableBatches.map(async (batches) => {
+      const tableOutcomes = [];
+      for (const group of batches) {
+        try {
+          await updateBitableRecordBatch(token, group[0].tableConfig, group);
+          tableOutcomes.push({ group, error: null });
+        } catch (error) {
+          invalidateBitableRecordCache(group[0].tableConfig.key);
+          tableOutcomes.push({ group, error });
+        }
+      }
+      return tableOutcomes;
+    }),
+  );
+  const outcomes = outcomeGroups.flat();
+
+  for (const outcome of outcomes) {
+    if (!outcome.error) {
+      applied.push(...outcome.group);
+      continue;
+    }
+    errors.push(outcome.error.message);
+    for (const plan of outcome.group) {
+      try {
+        const current = await getBitableRecord(token, plan.tableConfig, plan.recordId);
+        if (plan.verify(current?.fields || {})) applied.push(plan);
+        else failed.push(plan);
+      } catch (error) {
+        errors.push(error.message);
+        failed.push(plan);
+      }
+    }
+  }
+  return { applied, failed, errors };
+}
+
+function assertAllUpdatePlansApplied(actionName, outcome) {
+  if (outcome.failed.length === 0) return;
+  const appliedCodes = [...new Set(outcome.applied.map((plan) => plan.materialCode))];
+  const failedCodes = [...new Set(outcome.failed.map((plan) => plan.materialCode))];
+  const appliedText = appliedCodes.length > 0 ? `已成功：${appliedCodes.join("、")}；` : "";
+  const errorText = outcome.errors[0] ? `。原因：${outcome.errors[0]}` : "";
+  throw new Error(`${actionName}部分执行，${appliedText}未成功：${failedCodes.join("、")}${errorText}`);
 }
 
 function bitableValueToText(value) {
@@ -709,6 +1119,24 @@ function bitableValueToText(value) {
     return String(value.text ?? value.name ?? value.email ?? value.id ?? "");
   }
   return String(value).trim();
+}
+
+function plannedBitableFieldsMatch(currentFields, expectedFields, fieldTypes) {
+  return Object.entries(expectedFields).every(([fieldName, expectedValue]) => {
+    const currentValue = currentFields?.[fieldName];
+    const fieldType = fieldTypes.get(fieldName);
+    if (fieldType === 5) {
+      return parseBitableDateValue(currentValue) === parseBitableDateValue(expectedValue);
+    }
+    if (fieldType === 2) {
+      const currentNumber = Number(bitableValueToText(currentValue).replace(/,/g, ""));
+      const expectedNumber = Number(bitableValueToText(expectedValue).replace(/,/g, ""));
+      return Number.isFinite(currentNumber) &&
+        Number.isFinite(expectedNumber) &&
+        currentNumber === expectedNumber;
+    }
+    return bitableValueToText(currentValue) === bitableValueToText(expectedValue);
+  });
 }
 
 export function isDrawClaimCommand(text) {
@@ -762,6 +1190,74 @@ const drawingStatuses = {
   drawing: "\u7ed8\u56fe\u4e2d",
   done: "\u7ed8\u56fe\u5b8c\u6210",
 };
+const drawingOwnerRosterByTable = new Map();
+const drawingOwnerRosterLoads = new Map();
+
+function addDrawingOwnerToRoster(tableKey, owner, incrementOwned = false) {
+  const normalizedOwner = String(owner || "").trim();
+  const roster = drawingOwnerRosterByTable.get(tableKey);
+  if (!normalizedOwner || !roster) return;
+  const currentCount = roster.owners.get(normalizedOwner) || 0;
+  roster.owners.set(normalizedOwner, currentCount + (incrementOwned ? 1 : 0));
+}
+
+function replaceDrawingOwnerRosterFromRecords(tableConfig, records) {
+  const owners = new Map();
+  const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
+  for (const record of taskRecords) {
+    const currentOwner = bitableValueToText(record.fields?.[drawingOwnerField]);
+    const owner =
+      resolveMappedOwnerName(currentOwner) ||
+      drawingOwnerAliases[currentOwner] ||
+      currentOwner;
+    if (!owner) continue;
+    owners.set(owner, (owners.get(owner) || 0) + 1);
+  }
+  const roster = {
+    owners,
+    totalRecords: taskRecords.length,
+    refreshedAt: new Date().toISOString(),
+  };
+  drawingOwnerRosterByTable.set(tableConfig.key, roster);
+  return roster;
+}
+
+async function loadDrawingOwnerRosterTable(token, tableConfig) {
+  const records = await listBitableRecords(token, tableConfig, {
+    fieldNames: [drawingOwnerField, ...drawingMaterialFields],
+  });
+  return replaceDrawingOwnerRosterFromRecords(tableConfig, records);
+}
+
+async function ensureDrawingOwnerRosterTable(token, tableConfig, force = false) {
+  if (!force && drawingOwnerRosterByTable.has(tableConfig.key)) {
+    return drawingOwnerRosterByTable.get(tableConfig.key);
+  }
+  if (drawingOwnerRosterLoads.has(tableConfig.key)) {
+    return drawingOwnerRosterLoads.get(tableConfig.key);
+  }
+  const load = loadDrawingOwnerRosterTable(token, tableConfig).finally(() => {
+    drawingOwnerRosterLoads.delete(tableConfig.key);
+  });
+  drawingOwnerRosterLoads.set(tableConfig.key, load);
+  return load;
+}
+
+export async function refreshDrawingOwnerRoster({ tableKey } = {}) {
+  const token = await getTenantAccessToken();
+  const items = [];
+  for (const key of drawingTableKeys(tableKey)) {
+    const tableConfig = getBitableConfig(key);
+    const roster = await ensureDrawingOwnerRosterTable(token, tableConfig, true);
+    items.push({
+      table: tableConfig.key,
+      owners: roster.owners.size,
+      totalRecords: roster.totalRecords,
+      refreshedAt: roster.refreshedAt,
+    });
+  }
+  return { items };
+}
 
 function normalizeMaterialCodes(materialCodes) {
   const codes = [...new Set((materialCodes || []).map((code) => String(code).trim()).filter(Boolean))];
@@ -817,7 +1313,27 @@ function assertSingleMatchedRecordPerCode(matchedRecords, actionName) {
   const details = duplicated
     .map((item) => `${item.materialCode}(${item.records.length}条)`)
     .join("，");
-  throw new Error(`${actionName}存在重复料号：${details}，请缩小日期范围后再操作`);
+  throw new Error(`${actionName}发现重复料号：${details}，本次未修改任何记录，请先检查表格`);
+}
+
+function assertUniqueMatchedItemsAcrossTables(matchedItems, actionName) {
+  const matchesByCode = new Map();
+  for (const item of matchedItems) {
+    const normalizedCode = normalizeMaterialCodeForMatch(item.materialCode);
+    if (!normalizedCode) continue;
+    const current = matchesByCode.get(normalizedCode) || {
+      materialCode: item.materialCode,
+      count: 0,
+    };
+    current.count += item.records.length;
+    matchesByCode.set(normalizedCode, current);
+  }
+  const duplicated = [...matchesByCode.values()].filter((item) => item.count > 1);
+  if (duplicated.length === 0) return;
+  const details = duplicated
+    .map((item) => `${item.materialCode}(${item.count}条)`)
+    .join("，");
+  throw new Error(`${actionName}发现重复料号：${details}，本次未修改任何记录，请先检查表格`);
 }
 
 function getDrawingMaterialCode(fields) {
@@ -828,6 +1344,54 @@ function getDrawingMaterialCode(fields) {
   return "";
 }
 
+function duplicateMaterialCodes(values) {
+  const counts = new Map();
+  const displayValues = new Map();
+  for (const value of values) {
+    const displayValue = bitableValueToText(value).trim();
+    const normalized = normalizeMaterialCodeForMatch(displayValue);
+    if (!normalized) continue;
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+    if (!displayValues.has(normalized)) displayValues.set(normalized, displayValue);
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([normalized]) => displayValues.get(normalized));
+}
+
+async function assertNoDuplicateMaterialCodesBeforeCreate(token, tableConfig, fieldTypes, records) {
+  const incomingCodes = records.map((record) => getDrawingMaterialCode(record)).filter(Boolean);
+  if (incomingCodes.length === 0) return;
+
+  const duplicatesInUpload = duplicateMaterialCodes(incomingCodes);
+  if (duplicatesInUpload.length > 0) {
+    throw new Error(
+      `上传清单中发现重复料号：${duplicatesInUpload.join("、")}。本次未写入，请检查清单。`,
+    );
+  }
+  const incomingByNormalizedCode = new Map(
+    incomingCodes.map((code) => [normalizeMaterialCodeForMatch(code), code]),
+  );
+  const existingCodes = new Set(
+    (
+      await listRecentBitableRecords(token, tableConfig, fieldTypes, {
+        fieldNames: drawingMaterialFields,
+      })
+    )
+      .map((record) => normalizeMaterialCodeForMatch(getDrawingMaterialCode(record.fields)))
+      .filter(Boolean),
+  );
+  const duplicatesInTable = [...incomingByNormalizedCode.entries()]
+    .filter(([normalized]) => existingCodes.has(normalized))
+    .map(([, displayValue]) => displayValue);
+
+  if (duplicatesInTable.length > 0) {
+    throw new Error(
+      `${tableConfig.label}表最近500条中已存在相同料号：${duplicatesInTable.join("、")}。本次未写入，请检查后再上传。`,
+    );
+  }
+}
+
 function detectDrawingStatus(fields) {
   const currentStatus = bitableValueToText(fields?.[drawingStatusField]);
   const hasOwner = Boolean(bitableValueToText(fields?.[drawingOwnerField]));
@@ -836,23 +1400,15 @@ function detectDrawingStatus(fields) {
   return drawingStatuses.drawing;
 }
 
-function isTimestampToday(timestamp, now = new Date()) {
-  if (!timestamp) return false;
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return false;
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+function formatDateTime(timestamp = Date.now()) {
+  return formatShanghaiDateTime(timestamp);
 }
 
-function formatDateTime(timestamp = Date.now()) {
-  const date = new Date(timestamp);
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+function isBitableDateOnShanghaiDay(value, day) {
+  const text = bitableValueToText(value);
+  if (text.startsWith(day)) return true;
+  const timestamp = parseBitableDateValue(value);
+  return Boolean(timestamp && formatShanghaiDate(new Date(timestamp)) === day);
 }
 
 function bitableDateTimeValue(fieldTypes, fieldName, timestamp = Date.now()) {
@@ -869,8 +1425,35 @@ function resolveDrawingDurationField(fieldTypes) {
     null;
 }
 
-function durationValue(fieldTypes, durationField, durationMs) {
-  const minutes = calculateDurationMinutes(durationMs);
+function drawingStatusProjection(fieldTypes) {
+  const durationField = resolveDrawingDurationField(fieldTypes);
+  return [
+    drawingDateField,
+    drawingOwnerField,
+    drawingStatusField,
+    drawingClaimTimeField,
+    drawingCompleteTimeField,
+    durationField,
+    ...drawingMaterialFields,
+  ].filter((fieldName, index, fields) =>
+    fieldName && fieldTypes.has(fieldName) && fields.indexOf(fieldName) === index,
+  );
+}
+
+function drawingDurationProjection(fieldTypes, durationField) {
+  return [
+    drawingDateField,
+    drawingClaimTimeField,
+    drawingCompleteTimeField,
+    durationField,
+    ...drawingMaterialFields,
+  ].filter((fieldName, index, fields) =>
+    fieldName && fieldTypes.has(fieldName) && fields.indexOf(fieldName) === index,
+  );
+}
+
+function durationValue(fieldTypes, durationField, claimTimestamp, completeTimestamp) {
+  const minutes = calculateDrawingWorkDurationMinutes(claimTimestamp, completeTimestamp);
   return fieldTypes.get(durationField) === 2 ? minutes : String(minutes);
 }
 
@@ -888,20 +1471,7 @@ function bitableValueToNumber(value) {
 }
 
 function parseDateBoundary(value, endOfDay = false) {
-  const text = String(value || "").trim();
-  if (!text) return null;
-  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (!match) return null;
-  const [, year, month, day] = match;
-  return new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    endOfDay ? 23 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 999 : 0,
-  ).getTime();
+  return parseShanghaiDateBoundary(value, endOfDay);
 }
 
 function parseBitableDateValue(value) {
@@ -917,13 +1487,7 @@ function parseBitableDateValue(value) {
     const timestamp = Number(text);
     return text.length <= 10 ? timestamp * 1000 : timestamp;
   }
-  const normalized = text.replace(/\./g, "-").replace(/\//g, "-");
-  const match = normalized.match(
-    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
-  );
-  if (!match) return null;
-  const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime();
+  return parseShanghaiDateTime(text);
 }
 
 function isRecordInDateRange(record, startDate, endDate) {
@@ -934,6 +1498,16 @@ function isRecordInDateRange(record, startDate, endDate) {
   if (!recordTime) return false;
   if (startTime && recordTime < startTime) return false;
   if (endTime && recordTime > endTime) return false;
+  return true;
+}
+
+function isBitableDateInRange(value, startDate, endDate) {
+  const timestamp = parseBitableDateValue(value);
+  if (!timestamp) return false;
+  const startTime = parseDateBoundary(startDate);
+  const endTime = parseDateBoundary(endDate, true);
+  if (startTime && timestamp < startTime) return false;
+  if (endTime && timestamp > endTime) return false;
   return true;
 }
 
@@ -959,31 +1533,59 @@ function recordFingerprint(record) {
 export async function getDrawingStatusFingerprint({ startDate, endDate, tableKey } = {}) {
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
-  const records = filterRecordsByDateRange(await listCachedBitableRecords(token, tableConfig), startDate, endDate)
+  const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  const records = filterRecordsByDateRange(
+    await listCachedBitableRecords(token, tableConfig, {
+      startDate,
+      endDate,
+      fieldNames: drawingStatusProjection(fieldTypes),
+    }),
+    startDate,
+    endDate,
+  )
     .map(recordFingerprint)
     .sort((left, right) => left.recordId.localeCompare(right.recordId));
   return JSON.stringify(records);
 }
 
-export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {}) {
+export async function syncDrawingStatuses({
+  startDate,
+  endDate,
+  tableKey,
+  fillMissingTimestamps = true,
+} = {}) {
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
   const durationField = resolveDrawingDurationField(fieldTypes);
-  const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
-  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
-  if (!fieldTypes.has(drawingStatusField)) throw new Error(`Field not found: ${drawingStatusField}`);
+  const records = filterRecordsByDateRange(
+    await listBitableRecords(token, tableConfig, {
+      startDate,
+      endDate,
+      fieldNames: drawingStatusProjection(fieldTypes),
+    }),
+    startDate,
+    endDate,
+  );
+  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
+  if (!fieldTypes.has(drawingStatusField)) throw new Error(`数据表缺少字段：${drawingStatusField}`);
 
-  const items = [];
+  const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
   const summary = {
-    total: records.length,
+    total: taskRecords.length,
     unclaimed: 0,
     drawing: 0,
     done: 0,
     updated: 0,
+    skippedBlank: records.length - taskRecords.length,
+    missingClaimTime: 0,
+    missingCompleteTime: 0,
+    timestampsBackfilled: 0,
+    fillMissingTimestamps,
   };
+  const updatePlans = [];
 
-  for (const record of records) {
+  for (const record of taskRecords) {
     const nextStatus = detectDrawingStatus(record.fields || {});
     const currentStatus = bitableValueToText(record.fields?.[drawingStatusField]);
     const fieldsToUpdate = {};
@@ -998,15 +1600,23 @@ export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {})
     const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
     const completeTime = parseBitableDateValue(record.fields?.[drawingCompleteTimeField]);
     const now = Date.now();
-    if (hasOwner && !claimTime && fieldTypes.has(drawingClaimTimeField)) {
-      fieldsToUpdate[drawingClaimTimeField] = bitableDateTimeValue(fieldTypes, drawingClaimTimeField, now);
+    if (hasOwner && !claimTime) {
+      summary.missingClaimTime += 1;
+      if (fillMissingTimestamps && fieldTypes.has(drawingClaimTimeField)) {
+        fieldsToUpdate[drawingClaimTimeField] = bitableDateTimeValue(fieldTypes, drawingClaimTimeField, now);
+        summary.timestampsBackfilled += 1;
+      }
     }
-    if (nextStatus === drawingStatuses.done && !completeTime && fieldTypes.has(drawingCompleteTimeField)) {
-      fieldsToUpdate[drawingCompleteTimeField] = bitableDateTimeValue(fieldTypes, drawingCompleteTimeField, now);
+    if (nextStatus === drawingStatuses.done && !completeTime) {
+      summary.missingCompleteTime += 1;
+      if (fillMissingTimestamps && fieldTypes.has(drawingCompleteTimeField)) {
+        fieldsToUpdate[drawingCompleteTimeField] = bitableDateTimeValue(fieldTypes, drawingCompleteTimeField, now);
+        summary.timestampsBackfilled += 1;
+      }
     }
     const effectiveCompleteTime = completeTime || parseBitableDateValue(fieldsToUpdate[drawingCompleteTimeField]);
     if (claimTime && effectiveCompleteTime && durationField) {
-      const nextDuration = durationValue(fieldTypes, durationField, effectiveCompleteTime - claimTime);
+      const nextDuration = durationValue(fieldTypes, durationField, claimTime, effectiveCompleteTime);
       const currentDuration = bitableValueToText(record.fields?.[durationField]);
       if (currentDuration !== String(nextDuration)) {
         fieldsToUpdate[durationField] = nextDuration;
@@ -1014,18 +1624,28 @@ export async function syncDrawingStatuses({ startDate, endDate, tableKey } = {})
     }
 
     if (Object.keys(fieldsToUpdate).length > 0) {
-      await updateBitableRecord(token, tableConfig, record.record_id, fieldsToUpdate);
-      summary.updated += 1;
+      updatePlans.push({
+        tableConfig,
+        recordId: record.record_id,
+        materialCode: getDrawingMaterialCode(record.fields || {}),
+        fields: fieldsToUpdate,
+        verify: (currentFields) =>
+          plannedBitableFieldsMatch(currentFields, fieldsToUpdate, fieldTypes),
+      });
     }
 
     if (nextStatus === drawingStatuses.unclaimed) summary.unclaimed += 1;
     else if (nextStatus === drawingStatuses.drawing) summary.drawing += 1;
     else if (nextStatus === drawingStatuses.done) summary.done += 1;
-
-    items.push({ recordId: record.record_id, status: nextStatus });
   }
 
-  return { table: tableConfig.key, summary, items };
+  const updateOutcome = await executeVerifiedUpdatePlans(token, updatePlans);
+  summary.updated = updateOutcome.applied.length;
+  assertAllUpdatePlansApplied("状态检测", updateOutcome);
+
+  const rosterRefreshed = !startDate && !endDate;
+  if (rosterRefreshed) replaceDrawingOwnerRosterFromRecords(tableConfig, records);
+  return { table: tableConfig.key, summary, rosterRefreshed };
 }
 
 export async function recalculateDrawingDurations({ startDate, endDate, tableKey } = {}) {
@@ -1033,21 +1653,32 @@ export async function recalculateDrawingDurations({ startDate, endDate, tableKey
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
   const durationField = resolveDrawingDurationField(fieldTypes);
-  const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
+  const records = filterRecordsByDateRange(
+    await listBitableRecords(token, tableConfig, {
+      startDate,
+      endDate,
+      fieldNames: drawingDurationProjection(fieldTypes, durationField),
+    }),
+    startDate,
+    endDate,
+  );
 
-  if (!fieldTypes.has(drawingClaimTimeField)) throw new Error(`Field not found: ${drawingClaimTimeField}`);
-  if (!fieldTypes.has(drawingCompleteTimeField)) throw new Error(`Field not found: ${drawingCompleteTimeField}`);
-  if (!durationField) throw new Error(`Field not found: ${drawingDurationField}`);
+  if (!fieldTypes.has(drawingClaimTimeField)) throw new Error(`数据表缺少字段：${drawingClaimTimeField}`);
+  if (!fieldTypes.has(drawingCompleteTimeField)) throw new Error(`数据表缺少字段：${drawingCompleteTimeField}`);
+  if (!durationField) throw new Error(`数据表缺少字段：${drawingDurationField}`);
 
+  const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
   const summary = {
-    scanned: records.length,
+    scanned: taskRecords.length,
     eligible: 0,
     updated: 0,
     missingTime: 0,
     invalidTime: 0,
+    skippedBlank: records.length - taskRecords.length,
   };
+  const updatePlans = [];
 
-  for (const record of records) {
+  for (const record of taskRecords) {
     const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
     const completeTime = parseBitableDateValue(record.fields?.[drawingCompleteTimeField]);
     if (!claimTime || !completeTime) {
@@ -1060,15 +1691,24 @@ export async function recalculateDrawingDurations({ startDate, endDate, tableKey
     }
 
     summary.eligible += 1;
-    const nextDuration = durationValue(fieldTypes, durationField, completeTime - claimTime);
+    const nextDuration = durationValue(fieldTypes, durationField, claimTime, completeTime);
     const currentDuration = bitableValueToText(record.fields?.[durationField]);
     if (currentDuration === String(nextDuration)) continue;
 
-    await updateBitableRecord(token, tableConfig, record.record_id, {
-      [durationField]: nextDuration,
+    const fieldsToUpdate = { [durationField]: nextDuration };
+    updatePlans.push({
+      tableConfig,
+      recordId: record.record_id,
+      materialCode: getDrawingMaterialCode(record.fields || {}),
+      fields: fieldsToUpdate,
+      verify: (currentFields) =>
+        plannedBitableFieldsMatch(currentFields, fieldsToUpdate, fieldTypes),
     });
-    summary.updated += 1;
   }
+
+  const updateOutcome = await executeVerifiedUpdatePlans(token, updatePlans);
+  summary.updated = updateOutcome.applied.length;
+  assertAllUpdatePlansApplied("重算用时", updateOutcome);
 
   return { table: tableConfig.key, summary };
 }
@@ -1079,11 +1719,24 @@ export async function queryUnclaimedDrawings({ tableKey } = {}) {
   for (const key of drawingTableKeys(tableKey)) {
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
-    const records = await listCachedBitableRecords(token, tableConfig);
-    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
+    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
+    const records = await listCachedBitableRecords(token, tableConfig, {
+      fieldNames: [drawingOwnerField, ...drawingMaterialFields].filter((fieldName) =>
+        fieldTypes.has(fieldName),
+      ),
+      filterConditions: [{
+        field_name: drawingOwnerField,
+        operator: "isEmpty",
+        value: [],
+      }],
+    });
     items.push(
       ...records
-        .filter((record) => !bitableValueToText(record.fields?.[drawingOwnerField]))
+        .filter(
+          (record) =>
+            getDrawingMaterialCode(record.fields || {}) &&
+            !bitableValueToText(record.fields?.[drawingOwnerField]),
+        )
         .map((record) => ({
           table: tableConfig.key,
           recordId: record.record_id,
@@ -1105,20 +1758,18 @@ export async function queryUnclaimedDrawings({ tableKey } = {}) {
 export async function queryDrawingOwnerStats({ tableKey } = {}) {
   const token = await getTenantAccessToken();
   const owners = new Map();
-  const now = new Date();
+  const today = formatShanghaiDate();
   let totalRecords = 0;
 
   for (const key of drawingTableKeys(tableKey)) {
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
-    const records = await listCachedBitableRecords(token, tableConfig);
-    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
-    totalRecords += records.length;
+    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
+    if (!fieldTypes.has(drawingStatusField)) throw new Error(`数据表缺少字段：${drawingStatusField}`);
 
-    for (const record of records) {
-      const fields = record.fields || {};
-      const owner = bitableValueToText(fields[drawingOwnerField]);
-      if (!owner) continue;
+    const roster = await ensureDrawingOwnerRosterTable(token, tableConfig);
+    totalRecords += roster.totalRecords;
+    for (const [owner, totalOwned] of roster.owners) {
       if (!owners.has(owner)) {
         owners.set(owner, {
           owner,
@@ -1130,13 +1781,65 @@ export async function queryDrawingOwnerStats({ tableKey } = {}) {
           activeItems: [],
         });
       }
+      owners.get(owner).totalOwned += totalOwned;
+    }
 
-      const item = owners.get(owner);
-      const status = detectDrawingStatus(fields);
-      const materialCode = getDrawingMaterialCode(fields) || "\u672a\u586b\u6599\u53f7";
-      item.totalOwned += 1;
+    const selectedFields = [
+      drawingOwnerField,
+      drawingStatusField,
+      drawingClaimTimeField,
+      drawingCompleteTimeField,
+      ...drawingMaterialFields,
+    ].filter((fieldName) => fieldTypes.has(fieldName));
+    const filterConditions = [{
+      field_name: drawingStatusField,
+      operator: "is",
+      value: [drawingStatuses.drawing],
+    }];
+    if (fieldTypes.has(drawingClaimTimeField)) {
+      filterConditions.push({
+        field_name: drawingClaimTimeField,
+        operator: "contains",
+        value: [today],
+      });
+    }
+    if (fieldTypes.has(drawingCompleteTimeField)) {
+      filterConditions.push({
+        field_name: drawingCompleteTimeField,
+        operator: "contains",
+        value: [today],
+      });
+    }
+    const liveRecords = await listCachedBitableRecords(token, tableConfig, {
+      fieldNames: selectedFields,
+      filterConditions,
+      filterConjunction: "or",
+    });
 
-      if (status === drawingStatuses.drawing) {
+    const getOwnerItem = (fields) => {
+      const owner = bitableValueToText(fields?.[drawingOwnerField]);
+      if (!owner) return null;
+      if (!owners.has(owner)) {
+        owners.set(owner, {
+          owner,
+          status: "idle",
+          drawingCount: 0,
+          todayClaimed: 0,
+          todayCompleted: 0,
+          totalOwned: 0,
+          activeItems: [],
+        });
+      }
+      return owners.get(owner);
+    };
+
+    for (const record of liveRecords) {
+      const fields = record.fields || {};
+      if (!getDrawingMaterialCode(fields)) continue;
+      const item = getOwnerItem(fields);
+      if (!item) continue;
+      if (detectDrawingStatus(fields) === drawingStatuses.drawing) {
+        const materialCode = getDrawingMaterialCode(fields) || "\u672a\u586b\u6599\u53f7";
         item.drawingCount += 1;
         item.activeItems.push({
           table: tableConfig.key,
@@ -1144,10 +1847,10 @@ export async function queryDrawingOwnerStats({ tableKey } = {}) {
           materialCode,
         });
       }
-      if (isTimestampToday(parseBitableDateValue(fields[drawingClaimTimeField]), now)) {
+      if (isBitableDateOnShanghaiDay(fields[drawingClaimTimeField], today)) {
         item.todayClaimed += 1;
       }
-      if (isTimestampToday(parseBitableDateValue(fields[drawingCompleteTimeField]), now)) {
+      if (isBitableDateOnShanghaiDay(fields[drawingCompleteTimeField], today)) {
         item.todayCompleted += 1;
       }
     }
@@ -1185,15 +1888,34 @@ export async function queryDrawingOwnerStats({ tableKey } = {}) {
 export async function queryHomeDashboardTable({ startDate, endDate, tableKey } = {}) {
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
-  const records = filterRecordsByDateRange(
-    await listCachedBitableRecords(token, tableConfig),
-    startDate,
-    endDate,
+  const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  const selectedFields = [
+    drawingDateField,
+    drawingOwnerField,
+    drawingStatusField,
+    drawingClaimTimeField,
+    drawingCompleteTimeField,
+    ...drawingMaterialFields,
+  ].filter((fieldName) => fieldTypes.has(fieldName));
+  const [records, recentEventRecords] = await Promise.all([
+    listCachedBitableRecords(token, tableConfig, {
+      startDate,
+      endDate,
+      fieldNames: selectedFields,
+    }).then((items) => filterRecordsByDateRange(items, startDate, endDate)),
+    listCachedRecentBitableRecords(token, tableConfig, fieldTypes, {
+      limit: 500,
+      fieldNames: selectedFields,
+    }),
+  ]);
+  const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
+  const eventTaskRecords = recentEventRecords.filter((record) =>
+    getDrawingMaterialCode(record.fields || {}),
   );
-  const summary = { total: records.length, unclaimed: 0, drawing: 0, done: 0 };
+  const summary = { total: taskRecords.length, unclaimed: 0, drawing: 0, done: 0 };
   const events = [];
 
-  for (const record of records) {
+  for (const record of taskRecords) {
     const fields = record.fields || {};
     const status = detectDrawingStatus(fields);
     const owner = bitableValueToText(fields[drawingOwnerField]);
@@ -1216,7 +1938,7 @@ export async function queryHomeDashboardTable({ startDate, endDate, tableKey } =
         status: "正常",
       });
     }
-    if (claimTime) {
+    if (claimTime && isBitableDateInRange(claimTime, startDate, endDate)) {
       events.push({
         id: `${tableConfig.key}:${record.record_id}:claim:${claimTime}`,
         time: new Date(claimTime).toISOString(),
@@ -1226,7 +1948,38 @@ export async function queryHomeDashboardTable({ startDate, endDate, tableKey } =
         status: "正常",
       });
     }
-    if (completeTime) {
+    if (completeTime && isBitableDateInRange(completeTime, startDate, endDate)) {
+      events.push({
+        id: `${tableConfig.key}:${record.record_id}:complete:${completeTime}`,
+        time: new Date(completeTime).toISOString(),
+        type: "完成",
+        source: tableConfig.label,
+        content: `${owner || "绘图人员"}完成 ${materialCode}`,
+        status: "成功",
+      });
+    }
+  }
+
+  const taskRecordIds = new Set(taskRecords.map((record) => record.record_id));
+  for (const record of eventTaskRecords) {
+    if (taskRecordIds.has(record.record_id)) continue;
+    const fields = record.fields || {};
+    const owner = bitableValueToText(fields[drawingOwnerField]);
+    const materialCode = getDrawingMaterialCode(fields) || "未填料号";
+    const claimTime = parseBitableDateValue(fields[drawingClaimTimeField]);
+    const completeTime = parseBitableDateValue(fields[drawingCompleteTimeField]);
+
+    if (claimTime && isBitableDateInRange(claimTime, startDate, endDate)) {
+      events.push({
+        id: `${tableConfig.key}:${record.record_id}:claim:${claimTime}`,
+        time: new Date(claimTime).toISOString(),
+        type: "领图",
+        source: tableConfig.label,
+        content: `${owner || "绘图人员"}领取 ${materialCode}`,
+        status: "正常",
+      });
+    }
+    if (completeTime && isBitableDateInRange(completeTime, startDate, endDate)) {
       events.push({
         id: `${tableConfig.key}:${record.record_id}:complete:${completeTime}`,
         time: new Date(completeTime).toISOString(),
@@ -1253,9 +2006,26 @@ export async function queryDrawingAnalytics({ startDate, endDate, tableKey } = {
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
   const durationField = resolveDrawingDurationField(fieldTypes);
-  const records = filterRecordsByDateRange(await listCachedBitableRecords(token, tableConfig), startDate, endDate);
+  const selectedFields = [
+    drawingDateField,
+    drawingOwnerField,
+    drawingScoreField,
+    drawingRegionField,
+    durationField,
+    ...drawingMaterialFields,
+  ].filter((fieldName) => fieldName && fieldTypes.has(fieldName));
+  const records = filterRecordsByDateRange(
+    await listCachedBitableRecords(token, tableConfig, {
+      startDate,
+      endDate,
+      fieldNames: selectedFields,
+    }),
+    startDate,
+    endDate,
+  );
 
-  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
+  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
+  const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
 
   const owners = new Map();
   const regions = new Map();
@@ -1264,7 +2034,7 @@ export async function queryDrawingAnalytics({ startDate, endDate, tableKey } = {
   let totalDuration = 0;
   let durationRecords = 0;
 
-  for (const record of records) {
+  for (const record of taskRecords) {
     const fields = record.fields || {};
     const owner = bitableValueToText(fields[drawingOwnerField]) || "未分配";
     const region = bitableValueToText(fields[drawingRegionField]) || "未填写";
@@ -1321,7 +2091,7 @@ export async function queryDrawingAnalytics({ startDate, endDate, tableKey } = {
     range: { startDate: startDate || "", endDate: endDate || "" },
     checkedAt: new Date().toISOString(),
     summary: {
-      total: records.length,
+      total: taskRecords.length,
       owners: ownerItems.filter((item) => item.name !== "未分配").length,
       regions: regionItems.filter((item) => item.name !== "未填写").length,
       totalScore: Math.round(totalScore * 10) / 10,
@@ -1345,8 +2115,8 @@ export async function queryDrawingClaimStatus({ materialCodes, tableKey }) {
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
-  const records = await listCachedBitableRecords(token, tableConfig);
-  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
+  const records = await listRecentBitableRecords(token, tableConfig, fieldTypes);
+  if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
 
   const { matchedRecords, missing } = matchDrawingRecordsByMaterialCodes(records, codes);
   const items = matchedRecords.flatMap((item) =>
@@ -1372,7 +2142,7 @@ export async function queryDrawingClaimStatus({ materialCodes, tableKey }) {
   };
 }
 
-export async function claimDrawingOwners({ materialCodes, senderName, senderId, startDate, endDate, tableKey }) {
+export async function claimDrawingOwners({ materialCodes, senderName, senderId, tableKey }) {
   let codes;
   try {
     codes = normalizeMaterialCodes(materialCodes);
@@ -1387,12 +2157,13 @@ export async function claimDrawingOwners({ materialCodes, senderName, senderId, 
   for (const key of drawingTableKeys(tableKey)) {
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
-    const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
-    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`Field not found: ${drawingOwnerField}`);
+    const records = await listRecentBitableRecords(token, tableConfig, fieldTypes);
+    if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
 
     const remainingCodes = codes.filter((code) => !foundCodes.has(code));
     if (remainingCodes.length === 0) break;
     const { matchedRecords } = matchDrawingRecordsByMaterialCodes(records, remainingCodes);
+    assertSingleMatchedRecordPerCode(matchedRecords, `${tableConfig.label}领图`);
     for (const item of matchedRecords) {
       if (item.records.length === 0) continue;
       foundCodes.add(item.materialCode);
@@ -1408,7 +2179,7 @@ export async function claimDrawingOwners({ materialCodes, senderName, senderId, 
     }
   }
   const missing = codes.filter((code) => !foundCodes.has(code));
-  if (missing.length > 0) throw new Error(`Material code not found: ${missing.join(", ")}`);
+  if (missing.length > 0) throw new Error(`未找到料号：${missing.join("，")}`);
 
   if (claimedByCode.size > 0) {
     const details = [...claimedByCode.entries()]
@@ -1418,7 +2189,7 @@ export async function claimDrawingOwners({ materialCodes, senderName, senderId, 
   }
 
   const now = Date.now();
-  const result = [];
+  const plans = [];
   for (const item of unclaimedItems) {
     const ownerType = item.fieldTypes.get(drawingOwnerField);
     const ownerValue = resolveDrawingOwnerValue(senderName, senderId, ownerType);
@@ -1428,14 +2199,47 @@ export async function claimDrawingOwners({ materialCodes, senderName, senderId, 
       if (item.fieldTypes.has(drawingClaimTimeField)) {
         fields[drawingClaimTimeField] = bitableDateTimeValue(item.fieldTypes, drawingClaimTimeField, now);
       }
-      await updateBitableRecord(token, item.tableConfig, record.record_id, fields);
-      result.push({ table: item.tableConfig.key, recordId: record.record_id, materialCode: item.materialCode });
+      const expectedOwner = normalizedDrawingOwnerIdentity(ownerValue);
+      plans.push({
+        tableConfig: item.tableConfig,
+        recordId: record.record_id,
+        materialCode: item.materialCode,
+        fields,
+        ownerValue,
+        verify: (currentFields) =>
+          normalizedDrawingOwnerIdentity(currentFields?.[drawingOwnerField]) === expectedOwner,
+      });
     }
   }
-  return result;
+  const outcome = await executeVerifiedUpdatePlans(token, plans);
+  for (const plan of outcome.applied) {
+      const ownerText = bitableValueToText(plan.ownerValue);
+      addDrawingOwnerToRoster(
+        plan.tableConfig.key,
+        resolveMappedOwnerName(ownerText) || ownerText,
+        true,
+      );
+  }
+  assertAllUpdatePlansApplied("领图", outcome);
+  return plans.map((plan) => ({
+    table: plan.tableConfig.key,
+    recordId: plan.recordId,
+    materialCode: plan.materialCode,
+  }));
 }
 
-export async function completeDrawings({ materialCodes, startDate, endDate, tableKey }) {
+function normalizedDrawingOwnerIdentity(value) {
+  const text = bitableValueToText(value);
+  return resolveMappedOwnerName(text) || drawingOwnerAliases[text] || text;
+}
+
+export async function completeDrawings({
+  materialCodes,
+  tableKey,
+  senderName,
+  senderId,
+  allowOwnerOverride = false,
+}) {
   let codes;
   try {
     codes = normalizeMaterialCodes(materialCodes);
@@ -1450,12 +2254,10 @@ export async function completeDrawings({ materialCodes, startDate, endDate, tabl
     const tableConfig = getBitableConfig(key);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
     const durationField = resolveDrawingDurationField(fieldTypes);
-    const records = filterRecordsByDateRange(await listBitableRecords(token, tableConfig), startDate, endDate);
-    if (!fieldTypes.has(drawingStatusField)) throw new Error(`Field not found: ${drawingStatusField}`);
+    const records = await listRecentBitableRecords(token, tableConfig, fieldTypes);
+    if (!fieldTypes.has(drawingStatusField)) throw new Error(`数据表缺少字段：${drawingStatusField}`);
 
-    const remainingCodes = codes.filter((code) => !foundCodes.has(code));
-    if (remainingCodes.length === 0) break;
-    const { matchedRecords } = matchDrawingRecordsByMaterialCodes(records, remainingCodes);
+    const { matchedRecords } = matchDrawingRecordsByMaterialCodes(records, codes);
     for (const item of matchedRecords) {
       if (item.records.length === 0) continue;
       foundCodes.add(item.materialCode);
@@ -1463,11 +2265,50 @@ export async function completeDrawings({ materialCodes, startDate, endDate, tabl
     }
   }
   const missing = codes.filter((code) => !foundCodes.has(code));
-  if (missing.length > 0) throw new Error(`Material code not found: ${missing.join(", ")}`);
+  if (missing.length > 0) throw new Error(`未找到料号：${missing.join("，")}`);
+  assertUniqueMatchedItemsAcrossTables(matchedItems, "图纸完成");
+
+  const cleanSenderId = String(senderId || "").trim();
+  const actor = normalizedDrawingOwnerIdentity(
+    (cleanSenderId && readNameIdMap()[cleanSenderId]) ||
+      String(senderName || "").trim() ||
+      cleanSenderId,
+  );
+  const candidates = matchedItems.flatMap((item) =>
+    item.records.map((record) => ({ ...item, records: undefined, record })),
+  );
+  const validationErrors = [];
+  for (const item of candidates) {
+    if (bitableValueToText(item.record.fields?.[drawingStatusField]) === drawingStatuses.done) {
+      continue;
+    }
+    const owner = normalizedDrawingOwnerIdentity(item.record.fields?.[drawingOwnerField]);
+    if (!owner) {
+      validationErrors.push(`${item.materialCode}尚未领图，请先领图`);
+      continue;
+    }
+    if (!allowOwnerOverride && (!actor || actor !== owner)) {
+      validationErrors.push(`${item.materialCode}由${owner}领取，只有领取人本人可以完成`);
+    }
+  }
+  if (validationErrors.length > 0) throw new Error(validationErrors.join("；"));
 
   const result = [];
+  const plans = [];
   for (const item of matchedItems) {
     for (const record of item.records) {
+      if (bitableValueToText(record.fields?.[drawingStatusField]) === drawingStatuses.done) {
+        result.push({
+          table: item.tableConfig.key,
+          recordId: record.record_id,
+          materialCode: item.materialCode,
+          changed: false,
+          alreadyCompleted: true,
+          owner: normalizedDrawingOwnerIdentity(record.fields?.[drawingOwnerField]),
+          adminOverride: false,
+        });
+        continue;
+      }
       const now = Date.now();
       const fields = {
         [drawingStatusField]: drawingStatuses.done,
@@ -1477,12 +2318,36 @@ export async function completeDrawings({ materialCodes, startDate, endDate, tabl
       }
       const claimTime = parseBitableDateValue(record.fields?.[drawingClaimTimeField]);
       if (claimTime && item.durationField) {
-        fields[item.durationField] = durationValue(item.fieldTypes, item.durationField, now - claimTime);
+        fields[item.durationField] = durationValue(
+          item.fieldTypes,
+          item.durationField,
+          claimTime,
+          now,
+        );
       }
-      await updateBitableRecord(token, item.tableConfig, record.record_id, fields);
-      result.push({ table: item.tableConfig.key, recordId: record.record_id, materialCode: item.materialCode });
+      const plan = {
+        tableConfig: item.tableConfig,
+        recordId: record.record_id,
+        materialCode: item.materialCode,
+        fields,
+        verify: (currentFields) =>
+          bitableValueToText(currentFields?.[drawingStatusField]) === drawingStatuses.done,
+        result: {
+          table: item.tableConfig.key,
+          recordId: record.record_id,
+          materialCode: item.materialCode,
+          changed: true,
+          alreadyCompleted: false,
+          owner: normalizedDrawingOwnerIdentity(record.fields?.[drawingOwnerField]),
+          adminOverride: allowOwnerOverride,
+        },
+      };
+      plans.push(plan);
+      result.push(plan.result);
     }
   }
+  const outcome = await executeVerifiedUpdatePlans(token, plans);
+  assertAllUpdatePlansApplied("图纸完成", outcome);
   return result;
 }
 
@@ -1513,8 +2378,14 @@ export async function confirmDrawingOrders({ materialCodes, tableKey }) {
     }
     eligibleTableCount += 1;
 
+    const orderProjection = [
+      ...drawingMaterialFields,
+      drawingOrderField,
+    ].filter((fieldName) => fieldTypes.has(fieldName));
     const { matchedRecords } = matchDrawingRecordsByMaterialCodes(
-      await listBitableRecords(token, tableConfig),
+      await listBitableRecords(token, tableConfig, {
+        fieldNames: orderProjection,
+      }),
       codes,
     );
     for (const item of matchedRecords) {
@@ -1530,15 +2401,21 @@ export async function confirmDrawingOrders({ materialCodes, tableKey }) {
 
   const missing = codes.filter((code) => !foundCodes.has(code));
   if (matchedItems.length === 0) throw new Error(`未找到料号：${missing.join("，")}`);
+  assertUniqueMatchedItemsAcrossTables(matchedItems, "下单确认");
 
   const result = [];
+  const plans = [];
   for (const item of matchedItems) {
     const fieldType = item.fieldTypes.get(drawingOrderField);
     for (const record of item.records) {
       const alreadyConfirmed = isOrderConfirmed(record.fields?.[drawingOrderField]);
       if (!alreadyConfirmed) {
-        await updateBitableRecord(token, item.tableConfig, record.record_id, {
-          [drawingOrderField]: orderConfirmedValue(fieldType),
+        plans.push({
+          tableConfig: item.tableConfig,
+          recordId: record.record_id,
+          materialCode: item.materialCode,
+          fields: { [drawingOrderField]: orderConfirmedValue(fieldType) },
+          verify: (currentFields) => isOrderConfirmed(currentFields?.[drawingOrderField]),
         });
       }
       result.push({
@@ -1549,11 +2426,13 @@ export async function confirmDrawingOrders({ materialCodes, tableKey }) {
       });
     }
   }
+  const outcome = await executeVerifiedUpdatePlans(token, plans);
+  assertAllUpdatePlansApplied("下单确认", outcome);
   return { result, missing };
 }
 
 async function uploadBitableImage(token, tableConfig, image) {
-  if (!image?.buffer) throw new Error("Image data was not found in the spreadsheet.");
+  if (!image?.buffer) throw new Error("未在表格中找到图片数据。");
   const form = new FormData();
   form.append("file_name", image.fileName);
   form.append("parent_type", "bitable_image");
@@ -1561,16 +2440,16 @@ async function uploadBitableImage(token, tableConfig, image) {
   form.append("size", String(image.buffer.length));
   form.append("file", new Blob([image.buffer], { type: image.mimeType }), image.fileName);
 
-  const response = await fetch("https://open.feishu.cn/open-apis/drive/v1/medias/upload_all", {
+  const { response, data } = await fetchFeishuJson("https://open.feishu.cn/open-apis/drive/v1/medias/upload_all", {
     method: "POST",
+    timeoutMs: feishuRequestTimeoutMs.mediaUpload,
     headers: {
       Authorization: `Bearer ${token}`,
     },
     body: form,
   });
-  const data = await response.json();
   if (!response.ok || data.code !== 0) {
-    throw new Error(`Failed to upload bitable image: ${data.msg || response.statusText} ${JSON.stringify(data)}`);
+    throw new Error("上传图片到飞书多维表失败，已跳过该图片。");
   }
   return data.data?.file_token;
 }
@@ -1663,20 +2542,27 @@ async function convertRecordByFieldTypes(record, fieldTypes, token, tableConfig,
 }
 
 export async function createBitableRecords(records, { tableKey } = {}) {
+  if (!Array.isArray(records)) throw new Error("写入记录格式无效");
+  if (records.length > spreadsheetLimits.importRows) {
+    throw new Error(
+      `本次共有 ${records.length} 行，单次最多允许 ${spreadsheetLimits.importRows} 行，请拆分后重试。`,
+    );
+  }
   const token = await getTenantAccessToken();
   const tableConfig = getBitableConfig(tableKey);
   const fieldTypes = await getBitableFieldMap(token, tableConfig);
+  await assertNoDuplicateMaterialCodesBeforeCreate(token, tableConfig, fieldTypes, records);
   const uploadCache = new Map();
   const convertedRecords = [];
-  const warnings = [];
+  const warnings = Array.isArray(records.warnings) ? [...records.warnings] : [];
   for (const record of records) {
     const converted = await convertRecordByFieldTypes(record, fieldTypes, token, tableConfig, uploadCache, warnings);
     if (Object.keys(converted).length === 0) {
       warnings.push("已跳过 1 行空白记录。");
       continue;
     }
-    if (fieldTypes.get("日期") === 5 && converted["日期"] === undefined) {
-      converted["日期"] = todayDateTimestamp();
+    if (fieldTypes.has(drawingDateField)) {
+      converted[drawingDateField] = todayDateValue(fieldTypes.get(drawingDateField));
     }
     convertedRecords.push(converted);
   }
@@ -1687,7 +2573,7 @@ export async function createBitableRecords(records, { tableKey } = {}) {
   }
   if (records.length === 1) {
     const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records`;
-    const response = await fetch(url, {
+    const { response, data } = await fetchFeishuJson(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -1695,9 +2581,8 @@ export async function createBitableRecords(records, { tableKey } = {}) {
       },
       body: JSON.stringify({ fields: convertedRecords[0] }),
     });
-    const data = await response.json();
     if (!response.ok || data.code !== 0) {
-      throw new Error(`Failed to create bitable record: ${data.msg || response.statusText} ${JSON.stringify(data)}`);
+      throw new Error("写入飞书多维表记录失败，请稍后重试。");
     }
     const created = [data.data?.record];
     created.warnings = warnings;
@@ -1706,17 +2591,17 @@ export async function createBitableRecords(records, { tableKey } = {}) {
   }
 
   const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/records/batch_create`;
-  const response = await fetch(url, {
+  const { response, data } = await fetchFeishuJson(url, {
     method: "POST",
+    timeoutMs: feishuRequestTimeoutMs.batchWrite,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json; charset=utf-8",
     },
     body: JSON.stringify({ records: convertedRecords.map((fields) => ({ fields })) }),
   });
-  const data = await response.json();
   if (!response.ok || data.code !== 0) {
-    throw new Error(`Failed to batch create bitable records: ${data.msg || response.statusText} ${JSON.stringify(data)}`);
+    throw new Error("批量写入飞书多维表记录失败，请稍后重试。");
   }
   const created = data.data?.records || [];
   created.warnings = warnings;

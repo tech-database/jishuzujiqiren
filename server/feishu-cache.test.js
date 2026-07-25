@@ -76,3 +76,19 @@ test("does not cache loader failures", async () => {
   assert.equal(await load(), "token");
   assert.equal(loads, 2);
 });
+
+test("supports a TTL calculated from the loaded value", async () => {
+  let now = 1000;
+  let loads = 0;
+  const cache = new MemoryCache({ now: () => now });
+  const load = () => cache.get("dynamic-token", {
+    ttlMs: (value) => value.ttlMs,
+    loader: async () => ({ token: `token-${++loads}`, ttlMs: 50 }),
+  });
+
+  assert.equal((await load()).token, "token-1");
+  now += 49;
+  assert.equal((await load()).token, "token-1");
+  now += 2;
+  assert.equal((await load()).token, "token-2");
+});

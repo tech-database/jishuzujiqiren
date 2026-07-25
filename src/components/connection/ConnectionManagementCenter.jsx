@@ -38,8 +38,10 @@ export default function ConnectionManagementCenter({
   saving,
   savingConfig,
   checking,
+  refreshingConfig,
   saveConfig,
   checkConnection,
+  forceRefreshConfig,
   formatDisplayTime,
 }) {
   const [errors, setErrors] = useState({});
@@ -96,6 +98,11 @@ export default function ConnectionManagementCenter({
   async function handleTest() {
     if (!validateBeforeSubmit()) return;
     await checkConnection();
+  }
+
+  async function handleForceRefresh() {
+    if (!validateBeforeSubmit()) return;
+    await forceRefreshConfig();
   }
 
   function handleReset() {
@@ -231,12 +238,14 @@ export default function ConnectionManagementCenter({
         dirty={dirty}
         saving={saving}
         checking={checking}
+        refreshing={refreshingConfig}
         disabled={saving || checking}
         saveState={saveState}
         checkState={checkState}
         copiedField={copiedField}
         onSave={handleSave}
         onTest={handleTest}
+        onForceRefresh={handleForceRefresh}
         onReset={handleReset}
       >
         <div className="connection-test-target">
@@ -244,7 +253,13 @@ export default function ConnectionManagementCenter({
           {TableSelector && <TableSelector value={targetTable} onChange={setTargetTable} />}
         </div>
         {(savingConfig || checking) && (
-          <div className="connection-progress-note">{checking ? "正在测试连接并读取字段" : "正在保存配置"}</div>
+          <div className="connection-progress-note">
+            {refreshingConfig
+              ? "正在保存并应用新的表格地址"
+              : checking
+                ? "正在测试连接并读取字段"
+                : "正在保存配置"}
+          </div>
         )}
       </ConfigActionBar>
     </motion.section>

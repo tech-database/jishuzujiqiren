@@ -1,17 +1,19 @@
 import { memo } from "react";
-import { KeyRound, RotateCcw, Save } from "lucide-react";
+import { KeyRound, RefreshCw, RotateCcw, Save } from "lucide-react";
 import { GlassButton, GlassCard, StatusBadge } from "../design-system";
 
 function ConfigActionBarComponent({
   dirty,
   saving,
   checking,
+  refreshing,
   disabled,
   saveState,
   checkState,
   copiedField,
   onSave,
   onTest,
+  onForceRefresh,
   onReset,
   children,
 }) {
@@ -39,6 +41,15 @@ function ConfigActionBarComponent({
         <GlassButton variant="secondary" onClick={onSave} disabled={disabled || saving}>
           <Save size={17} />
           {saving && !checking ? "保存中" : "保存配置"}
+        </GlassButton>
+        <GlassButton
+          variant="secondary"
+          onClick={onForceRefresh}
+          disabled={disabled || refreshing}
+          title="保存当前配置、清除缓存并立即使用新的表格地址"
+        >
+          <RefreshCw size={17} />
+          {refreshing ? "刷新中" : "强制刷新"}
         </GlassButton>
         <GlassButton variant="primary" onClick={onTest} disabled={disabled || checking}>
           <KeyRound size={17} />
