@@ -7,12 +7,23 @@ import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
 import { parse as parseDotenv } from "dotenv";
 import {
+  formatShanghaiDate,
+  millisecondsUntilNextShanghaiHour,
+  parseShanghaiDateBoundary,
+  recentShanghaiDateRange,
+} from "./date-range.js";
+import {
+  LoginAttemptLimiter,
+  getRequestClientIp,
+} from "./login-attempt-limiter.js";
+import {
   claimDrawingOwners,
   completeDrawings,
   confirmDrawingOrders,
   createBitableRecords,
   extractMaterialCodes,
   extractTextFromFeishuEvent,
+  fetchFeishuJson,
   getBitableConfig,
   getConfigStatus,
   getDrawingStatusFingerprint,
@@ -28,6 +39,7 @@ import {
   queryDrawingOwnerStats,
   queryUnclaimedDrawings,
   recalculateDrawingDurations,
+  refreshDrawingOwnerRoster,
   syncDrawingStatuses,
   writeFromText,
 } from "./bot-core.js";
@@ -39,6 +51,10 @@ const app = express();
 const port = Number(process.env.PORT || 8787);
 const envPath = path.join(rootDir, ".env");
 const statusSyncIntervalMs = Number(process.env.STATUS_SYNC_INTERVAL_MS || 10000);
+const dailyFullStatusSyncHour = Math.min(
+  23,
+  Math.max(0, Math.floor(Number(process.env.DAILY_FULL_STATUS_SYNC_HOUR ?? 2) || 0)),
+);
 const feishuWebhookEnabled = process.env.FEISHU_WEBHOOK_ENABLED === "true";
 const websocketStatusPath = path.join(__dirname, ".runtime", "long-connection-status.json");
 const configWritePassword = process.env.CONFIG_WRITE_PASSWORD || "888888";
@@ -46,10 +62,11 @@ const adminAccessPassword = process.env.ADMIN_ACCESS_PASSWORD || "888000";
 const adminSessionCookie = "tech_admin_session";
 const adminSessionTtlMs = 8 * 60 * 60 * 1000;
 const adminSessions = new Map();
+const adminLoginLimiter = new LoginAttemptLimiter();
 const statusSyncRunningTables = new Set();
 let backgroundStatusCheckRunning = false;
 let lastDashboardForceRefreshAt = 0;
-const dashboardForceRefreshCooldownMs = 5000;
+const dashboardForceRefreshCooldownMs = 15000;
 const lastBackgroundFingerprints = {};
 const serverStartedAt = new Date().toISOString();
 const statusSyncInfo = {
@@ -66,6 +83,13 @@ const statusSyncInfo = {
   lastError: "",
   lastSummary: null,
   skippedCount: 0,
+  dailyFull: {
+    hour: dailyFullStatusSyncHour,
+    lastStartedAt: "",
+    lastFinishedAt: "",
+    lastError: "",
+    summaries: {},
+  },
   tables: {},
 };
 
@@ -163,10 +187,37 @@ app.get("/api/admin/session", (req, res) => {
 });
 
 app.post("/api/admin/login", (req, res) => {
-  if (!securePasswordEquals(req.body?.password, adminAccessPassword)) {
-    res.status(401).json({ ok: false, error: "管理员验证失败" });
+  const clientIp = getRequestClientIp(req);
+  const currentLimit = adminLoginLimiter.check(clientIp);
+  if (!currentLimit.allowed) {
+    const retryAfterSeconds = Math.max(1, Math.ceil(currentLimit.retryAfterMs / 1000));
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    res.status(429).json({
+      ok: false,
+      error: `管理员登录失败次数过多，请在 ${Math.ceil(retryAfterSeconds / 60)} 分钟后重试`,
+      retryAfterSeconds,
+    });
     return;
   }
+  if (!securePasswordEquals(req.body?.password, adminAccessPassword)) {
+    const failedLimit = adminLoginLimiter.recordFailure(clientIp);
+    if (!failedLimit.allowed) {
+      const retryAfterSeconds = Math.max(1, Math.ceil(failedLimit.retryAfterMs / 1000));
+      res.setHeader("Retry-After", String(retryAfterSeconds));
+      res.status(429).json({
+        ok: false,
+        error: "管理员登录连续失败 5 次，已锁定 10 分钟",
+        retryAfterSeconds,
+      });
+      return;
+    }
+    res.status(401).json({
+      ok: false,
+      error: `管理员验证失败，还可尝试 ${failedLimit.remainingAttempts} 次`,
+    });
+    return;
+  }
+  adminLoginLimiter.recordSuccess(clientIp);
   const token = randomBytes(32).toString("base64url");
   const expiresAt = Date.now() + adminSessionTtlMs;
   adminSessions.set(token, { expiresAt });
@@ -181,39 +232,20 @@ app.post("/api/admin/logout", (req, res) => {
   res.json({ ok: true, authenticated: false });
 });
 
-function formatDateInput(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date, days) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 function parseDashboardDate(value, fallback) {
   const text = String(value || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
-  const [year, month, day] = text.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  return formatDateInput(date) === text ? text : fallback;
+  return parseShanghaiDateBoundary(text) === null ? fallback : text;
 }
 
 function defaultStatusDateRange() {
-  const today = new Date();
-  return {
-    startDate: formatDateInput(addDays(today, -2)),
-    endDate: formatDateInput(today),
-  };
+  return recentShanghaiDateRange(7);
 }
 
 async function replyToMessage(messageId, text) {
   if (process.env.FEISHU_REPLY_ENABLED !== "true" || !messageId) return;
   const token = await getTenantAccessToken();
-  await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/reply`, {
+  await fetchFeishuJson(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/reply`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -332,8 +364,8 @@ function publicConfig() {
   };
 }
 
-function applyRuntimeConfig(config) {
-  const entries = {
+function buildRuntimeConfigEntries(config) {
+  return {
     PORT: String(port),
     FEISHU_APP_ID: config.appId || "",
     FEISHU_APP_SECRET: config.appSecret || process.env.FEISHU_APP_SECRET || "",
@@ -345,9 +377,11 @@ function applyRuntimeConfig(config) {
     NAME_ID_MAP_JSON: JSON.stringify(config.nameIdMap || {}),
     FEISHU_REPLY_ENABLED: config.replyEnabled ? "true" : "false",
   };
+}
+
+function applyRuntimeConfig(entries) {
   for (const [key, value] of Object.entries(entries)) process.env[key] = value;
   invalidateAllFeishuCaches();
-  return entries;
 }
 
 function serializeEnv(entries) {
@@ -382,6 +416,7 @@ async function runStatusSync(reason, range = {}, { skipIfRunning = false, suppre
     startDate: range.startDate || "",
     endDate: range.endDate || "",
     tableKey: range.tableKey || "board",
+    fillMissingTimestamps: range.fillMissingTimestamps !== false,
   };
   const tableSyncInfo = getTableSyncInfo(syncRange.tableKey);
   if (statusSyncRunningTables.has(syncRange.tableKey)) {
@@ -486,6 +521,65 @@ async function runBackgroundStatusSync(reason = "timer") {
   }
 }
 
+async function runDailyFullStatusSync() {
+  if (backgroundStatusCheckRunning || statusSyncRunningTables.size > 0 || !getConfigStatus().ready) return false;
+  backgroundStatusCheckRunning = true;
+  statusSyncInfo.dailyFull.lastStartedAt = new Date().toISOString();
+  statusSyncInfo.dailyFull.lastError = "";
+  statusSyncInfo.dailyFull.summaries = {};
+  const results = [];
+  const errors = [];
+  try {
+    const configuredTableKeys = Object.entries(getConfigStatus().tables || {})
+      .filter(([, tableStatus]) => tableStatus.ready)
+      .map(([tableKey]) => tableKey);
+    for (const tableKey of configuredTableKeys) {
+      try {
+        const result = await runStatusSync(
+          "daily-full",
+          { tableKey, fillMissingTimestamps: false },
+          { skipIfRunning: true },
+        );
+        if (result) {
+          results.push(result);
+          statusSyncInfo.dailyFull.summaries[tableKey] = result.summary;
+          const missingTimestamps =
+            Number(result.summary.missingClaimTime || 0) + Number(result.summary.missingCompleteTime || 0);
+          if (missingTimestamps > 0) {
+            console.warn(
+              `Historical timestamp anomalies (${tableKey}): missingClaim=${result.summary.missingClaimTime}, missingComplete=${result.summary.missingCompleteTime}; timestamps preserved`,
+            );
+          }
+        }
+        lastBackgroundFingerprints[tableKey] = await getDrawingStatusFingerprint({
+          ...defaultStatusDateRange(),
+          tableKey,
+        });
+      } catch (error) {
+        errors.push(`${tableKey === "paint" ? "油漆" : "胶板"}：${error.message}`);
+      }
+    }
+    statusSyncInfo.dailyFull.lastError = errors.join("；");
+    return results;
+  } catch (error) {
+    statusSyncInfo.dailyFull.lastError = error.message;
+    console.error("Daily full drawing status sync failed:", error.message);
+    return null;
+  } finally {
+    statusSyncInfo.dailyFull.lastFinishedAt = new Date().toISOString();
+    backgroundStatusCheckRunning = false;
+  }
+}
+
+function scheduleDailyFullStatusSync(retryDelayMs = null) {
+  const delay = retryDelayMs ?? millisecondsUntilNextShanghaiHour(dailyFullStatusSyncHour);
+  const timer = setTimeout(async () => {
+    const result = await runDailyFullStatusSync();
+    scheduleDailyFullStatusSync(result === false ? 5 * 60 * 1000 : null);
+  }, delay);
+  timer.unref?.();
+}
+
 app.get("/api/background-status-sync", (_req, res) => {
   res.json({ ok: true, status: statusSyncInfo });
 });
@@ -510,9 +604,10 @@ app.get("/api/config", (_req, res) => {
 app.post("/api/config", requireAdminAccess, async (req, res) => {
   try {
     assertConfigWritePassword(req.body?.adminPassword);
-    const entries = applyRuntimeConfig(req.body || {});
+    const entries = buildRuntimeConfigEntries(req.body || {});
     const existingEntries = await readEnvEntries();
     await writeFile(envPath, serializeEnv({ ...existingEntries, ...entries }), "utf8");
+    applyRuntimeConfig(entries);
     res.json({ ok: true, config: publicConfig(), status: getConfigStatus() });
   } catch (error) {
     res.status(error.statusCode || 400).json({ ok: false, error: error.message });
@@ -524,10 +619,9 @@ app.post("/api/check-connection", requireAdminAccess, async (req, res) => {
     const token = await getTenantAccessToken();
     const tableConfig = getBitableConfig(req.body?.tableKey);
     const fieldsUrl = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.appToken}/tables/${tableConfig.tableId}/fields?page_size=100`;
-    const response = await fetch(fieldsUrl, {
+    const { response, data } = await fetchFeishuJson(fieldsUrl, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const data = await response.json();
     if (!response.ok || data.code !== 0) {
       throw new Error(data.msg || response.statusText);
     }
@@ -567,7 +661,7 @@ app.post(
       if (!/\.(xlsx|xls|csv)$/i.test(fileName)) {
         throw new Error("仅支持 xlsx、xls、csv 文件");
       }
-      const records = await parseSpreadsheetBuffer(req.body);
+      const records = await parseSpreadsheetBuffer(req.body, { fileName });
       const result = await createBitableRecords(records, { tableKey: req.query.tableKey });
       res.json({
         ok: true,
@@ -594,8 +688,6 @@ app.post("/api/claim-drawing", async (req, res) => {
       materialCodes,
       senderName: req.body?.senderName,
       senderId: req.body?.senderId,
-      startDate: req.body?.startDate,
-      endDate: req.body?.endDate,
       tableKey: req.body?.tableKey,
     });
     res.json({
@@ -611,19 +703,34 @@ app.post("/api/claim-drawing", async (req, res) => {
 
 app.post("/api/complete-drawing", async (req, res) => {
   try {
+    if (!readAdminSession(req)) {
+      return res.status(403).json({
+        ok: false,
+        error: "管理员网页代完成需要先通过管理员密码验证",
+      });
+    }
     const materialCodes =
       Array.isArray(req.body?.materialCodes) && req.body.materialCodes.length > 0
         ? req.body.materialCodes
         : extractMaterialCodes(req.body?.text || "");
     const result = await completeDrawings({
       materialCodes,
-      startDate: req.body?.startDate,
-      endDate: req.body?.endDate,
       tableKey: req.body?.tableKey,
+      allowOwnerOverride: true,
     });
+    const updated = result.filter((item) => item.changed);
+    const alreadyCompleted = result.filter((item) => !item.changed);
+    const adminOverrides = updated.filter((item) => item.adminOverride);
     res.json({
       ok: true,
-      count: result.length,
+      count: updated.length,
+      matchedCount: result.length,
+      alreadyCompletedCount: alreadyCompleted.length,
+      adminOverrideCount: adminOverrides.length,
+      warning:
+        adminOverrides.length > 0
+          ? `管理员已代为完成 ${adminOverrides.length} 条图纸`
+          : "",
       materialCodes: [...new Set(result.map((item) => item.materialCode))],
       result,
     });
@@ -695,10 +802,11 @@ app.get("/api/home-dashboard", async (req, res) => {
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");
     const now = new Date();
-    const today = formatDateInput(now);
-    const defaultRangeStart = formatDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
+    const today = formatShanghaiDate(now);
+    const defaultRangeStart = `${today.slice(0, 7)}-01`;
     const rangeEnd = parseDashboardDate(req.query.endDate, today);
     const rangeStart = parseDashboardDate(req.query.startDate, defaultRangeStart);
+    const includePerformance = req.query.includePerformance !== "0";
     if (rangeStart > rangeEnd) throw new Error("绩效统计开始日期不能晚于结束日期");
     if (rangeEnd > today) throw new Error("绩效统计结束日期不能晚于今天");
     const forceRefreshRequested = req.query.forceRefresh === "1";
@@ -708,6 +816,7 @@ app.get("/api/home-dashboard", async (req, res) => {
     if (forceRefreshApplied) {
       invalidateBitableRecordCache("board");
       invalidateBitableRecordCache("paint");
+      await refreshDrawingOwnerRoster();
       lastDashboardForceRefreshAt = now.getTime();
     }
     const [personnel, boardToday, paintToday, boardPerformance, paintPerformance, health] =
@@ -715,8 +824,12 @@ app.get("/api/home-dashboard", async (req, res) => {
         queryDrawingOwnerStats(),
         queryHomeDashboardTable({ startDate: today, endDate: today, tableKey: "board" }),
         queryHomeDashboardTable({ startDate: today, endDate: today, tableKey: "paint" }),
-        queryDrawingAnalytics({ startDate: rangeStart, endDate: rangeEnd, tableKey: "board" }),
-        queryDrawingAnalytics({ startDate: rangeStart, endDate: rangeEnd, tableKey: "paint" }),
+        includePerformance
+          ? queryDrawingAnalytics({ startDate: rangeStart, endDate: rangeEnd, tableKey: "board" })
+          : null,
+        includePerformance
+          ? queryDrawingAnalytics({ startDate: rangeStart, endDate: rangeEnd, tableKey: "paint" })
+          : null,
         buildHealthStatus(),
       ]);
 
@@ -773,7 +886,10 @@ app.get("/api/home-dashboard", async (req, res) => {
       health,
       personnel,
       today: { board: boardToday, paint: paintToday },
-      performance: { board: boardPerformance, paint: paintPerformance },
+      ...(includePerformance
+        ? { performance: { board: boardPerformance, paint: paintPerformance } }
+        : {}),
+      performanceIncluded: includePerformance,
       realtimeLogs,
       cache: {
         ...getFeishuCacheStatus(),
@@ -838,7 +954,7 @@ app.post("/api/recalculate-drawing-durations", async (req, res) => {
 
 app.post("/webhook/feishu", async (req, res) => {
   if (!feishuWebhookEnabled) {
-    return res.status(404).json({ ok: false, error: "Not Found" });
+    return res.status(404).json({ ok: false, error: "接口未启用" });
   }
 
   const body = req.body || {};
@@ -860,13 +976,13 @@ app.post("/webhook/feishu", async (req, res) => {
     await replyToMessage(
       messageId,
       result.dryRun
-        ? `Parsed ${result.count} row(s), but config is missing.`
-        : `Created ${result.count} bitable record(s).`,
+        ? `已解析 ${result.count} 条记录，但系统配置不完整，未执行写入。`
+        : `已成功写入 ${result.count} 条多维表记录。`,
     );
     res.json({ ok: true, ...result });
   } catch (error) {
     const messageId = body?.event?.message?.message_id;
-    await replyToMessage(messageId, `Write failed: ${error.message}`);
+    await replyToMessage(messageId, `写入失败：${error.message}`);
     res.status(400).json({ ok: false, error: error.message });
   }
 });
@@ -883,6 +999,13 @@ app.listen(port, () => {
       ? `Feishu webhook: http://127.0.0.1:${port}/webhook/feishu`
       : "Feishu webhook: disabled",
   );
-  runBackgroundStatusSync("startup");
-  setInterval(() => runBackgroundStatusSync("timer"), statusSyncIntervalMs);
+  refreshDrawingOwnerRoster()
+    .catch((error) => {
+      console.error("Drawing owner roster startup refresh failed:", error.message);
+    })
+    .finally(() => {
+      runBackgroundStatusSync("startup");
+      setInterval(() => runBackgroundStatusSync("timer"), statusSyncIntervalMs);
+    });
+  scheduleDailyFullStatusSync();
 });

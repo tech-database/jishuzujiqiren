@@ -48,7 +48,14 @@ function LiveLogPanelComponent({ logs, loading }) {
       </div>
 
       <div className="log-tools">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索日志内容" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索日志内容"
+          aria-label="搜索日志内容"
+          autoComplete="off"
+        />
         <select value={level} onChange={(event) => setLevel(event.target.value)} aria-label="日志级别筛选">
           <option value="all">全部级别</option>
           <option value="info">info</option>

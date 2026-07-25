@@ -57,6 +57,8 @@ export default function MonitoringCenter({
   setStatusDateRange,
   statusSyncing,
   backgroundSyncStatus,
+  healthStatus,
+  healthLoading,
   statusResult,
   statusState,
   syncDrawingStatus,
@@ -75,18 +77,43 @@ export default function MonitoringCenter({
     [backgroundSyncStatus, normalized],
   );
   const logs = useMemo(
-    () => normalizeLogEntries({ backgroundSyncStatus, statusResult, statusState, formatDisplayTime }),
-    [backgroundSyncStatus, formatDisplayTime, statusResult, statusState],
+    () => normalizeLogEntries({
+      backgroundSyncStatus,
+      healthStatus,
+      statusResult,
+      statusState,
+      formatDisplayTime,
+    }),
+    [backgroundSyncStatus, formatDisplayTime, healthStatus, statusResult, statusState],
   );
-  const healthTone = backgroundSyncStatus?.lastError ? "error" : backgroundSyncStatus?.lastCheckedAt ? "online" : "standby";
-  const healthLabel = backgroundSyncStatus?.lastError
-    ? "异常待处理"
-    : backgroundSyncStatus?.lastCheckedAt
-      ? "已检测"
-      : configReady
-        ? "等待检测"
-        : "未知状态";
+  const failedHealthChecks = Object.entries(healthStatus?.checks || {})
+    .filter(([, check]) => check?.ok === false);
+  const hasHealthError = Boolean(healthStatus && !healthStatus.ok);
+  const healthErrorText = failedHealthChecks
+    .map(([, check]) => check.message)
+    .filter(Boolean)
+    .join("；") || healthStatus?.label || "飞书连接健康检查未通过";
   const hasBackgroundError = Boolean(backgroundSyncStatus?.lastError);
+  const healthTone = hasHealthError || hasBackgroundError
+    ? "error"
+    : healthStatus?.ok && backgroundSyncStatus?.lastCheckedAt
+      ? "online"
+      : "standby";
+  const healthLabel = healthLoading && !healthStatus
+    ? "检测中"
+    : hasHealthError || hasBackgroundError
+      ? "异常待处理"
+      : healthStatus?.ok && backgroundSyncStatus?.lastCheckedAt
+        ? "运行正常"
+        : configReady
+          ? "等待检测"
+          : "未知状态";
+  const historicalTimestampAnomalies = Object.values(backgroundSyncStatus?.dailyFull?.summaries || {}).reduce(
+    (total, summary) =>
+      total + Number(summary?.missingClaimTime || 0) + Number(summary?.missingCompleteTime || 0),
+    0,
+  );
+  const hasMonitoringIssue = hasHealthError || hasBackgroundError || historicalTimestampAnomalies > 0;
   const lastCheckedLabel = backgroundSyncStatus?.lastCheckedAt
     ? formatDisplayTime(backgroundSyncStatus.lastCheckedAt)
     : "等待首次检测";
@@ -129,7 +156,7 @@ export default function MonitoringCenter({
         <div className="monitoring-filter-grid">
           <DateField
             label="开始日期"
-            hint="默认前天"
+            hint="默认最近7天"
             value={statusDateRange.startDate}
             onChange={(startDate) => setStatusDateRange((current) => ({ ...current, startDate }))}
           />
@@ -195,20 +222,38 @@ export default function MonitoringCenter({
       </section>
 
       <section className="monitoring-insight-grid">
-        <GlassCard className={`monitoring-error-panel ${hasBackgroundError ? "has-error" : "healthy"}`}>
+        <GlassCard className={`monitoring-error-panel ${hasMonitoringIssue ? "has-error" : "healthy"}`}>
           <div className="monitoring-panel-head">
             <div>
-              <h3>{hasBackgroundError ? "异常监控" : "当前运行正常"}</h3>
-              <p>{hasBackgroundError ? "检测到后台接口返回错误，请及时处理。" : "后台检测链路当前没有异常记录。"}</p>
+              <h3>{hasMonitoringIssue ? "异常监控" : "当前运行正常"}</h3>
+              <p>
+                {hasHealthError
+                  ? "检测到飞书凭证、数据表或长连接异常，请及时处理。"
+                  : hasBackgroundError
+                  ? "检测到后台接口返回错误，请及时处理。"
+                  : historicalTimestampAnomalies > 0
+                    ? "历史记录存在缺失时间，凌晨扫描已保留原值，未自动补写。"
+                    : "后台检测链路当前没有异常记录。"}
+              </p>
             </div>
-            <StatusBadge tone={hasBackgroundError ? "error" : "success"}>
-              {hasBackgroundError ? "需要处理" : "运行正常"}
+            <StatusBadge tone={hasMonitoringIssue ? "warning" : "success"}>
+              {hasMonitoringIssue ? "需要关注" : "运行正常"}
             </StatusBadge>
           </div>
-          {hasBackgroundError ? (
+          {hasHealthError ? (
+            <div className="monitoring-error-message">
+              <AlertTriangle size={18} />
+              <span>{healthErrorText}</span>
+            </div>
+          ) : hasBackgroundError ? (
             <div className="monitoring-error-message">
               <AlertTriangle size={18} />
               <span>{backgroundSyncStatus.lastError}</span>
+            </div>
+          ) : historicalTimestampAnomalies > 0 ? (
+            <div className="monitoring-error-message">
+              <AlertTriangle size={18} />
+              <span>发现 {historicalTimestampAnomalies} 项历史时间缺失；状态可纠正，领取/完成时间保持不变。</span>
             </div>
           ) : (
             <div className="monitoring-health-message">

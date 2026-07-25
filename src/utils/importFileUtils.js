@@ -1,6 +1,7 @@
 export const IMPORT_FILE_EXTENSIONS = [".xlsx", ".xls", ".csv"];
 export const IMPORT_FILE_ACCEPT = IMPORT_FILE_EXTENSIONS.join(",");
 export const IMPORT_FILE_MAX_BYTES = 50 * 1024 * 1024;
+export const IMPORT_ROW_LIMIT = 200;
 
 function getFileExtension(fileName = "") {
   const match = String(fileName).toLowerCase().match(/\.[^.]+$/);

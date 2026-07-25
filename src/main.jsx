@@ -389,14 +389,22 @@ function combineStatusResults(resultsByKey, range) {
       drawing: combined.drawing + Number(result.summary.drawing || 0),
       done: combined.done + Number(result.summary.done || 0),
       updated: combined.updated + Number(result.summary.updated || 0),
+      missingClaimTime: combined.missingClaimTime + Number(result.summary.missingClaimTime || 0),
+      missingCompleteTime: combined.missingCompleteTime + Number(result.summary.missingCompleteTime || 0),
+      timestampsBackfilled: combined.timestampsBackfilled + Number(result.summary.timestampsBackfilled || 0),
     }),
-    { total: 0, unclaimed: 0, drawing: 0, done: 0, updated: 0 },
+    {
+      total: 0,
+      unclaimed: 0,
+      drawing: 0,
+      done: 0,
+      updated: 0,
+      missingClaimTime: 0,
+      missingCompleteTime: 0,
+      timestampsBackfilled: 0,
+    },
   );
-  const items = tableResults.flatMap((result, index) => {
-    const tableKey = result.table || statusTableKeys[index];
-    return (result.items || []).map((item) => ({ ...item, table: tableKey, cacheId: `${tableKey}:${item.recordId}` }));
-  });
-  return { table: "all", tables: statusTableKeys, summary, items };
+  return { table: "all", tables: statusTableKeys, summary };
 }
 
 function App() {
@@ -408,6 +416,7 @@ function App() {
   const [checkState, setCheckState] = useState(null);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [refreshingConfig, setRefreshingConfig] = useState(false);
   const [bitableFields, setBitableFields] = useState([]);
   const [fieldMappings, setFieldMappings] = useState({});
   const [nameIdRows, setNameIdRows] = useState([{ id: "", name: "" }]);
@@ -423,6 +432,9 @@ function App() {
   });
   const [adminSubmitting, setAdminSubmitting] = useState(false);
   const [adminError, setAdminError] = useState("");
+  const [sensitiveAction, setSensitiveAction] = useState(null);
+  const [sensitiveActionSubmitting, setSensitiveActionSubmitting] = useState(false);
+  const [sensitiveActionError, setSensitiveActionError] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [targetTable, setTargetTable] = useState("board");
@@ -458,7 +470,7 @@ function App() {
   const [statusDateRange, setStatusDateRange] = useState(() => {
     const today = new Date();
     return {
-      startDate: formatDateInput(addDays(today, -2)),
+      startDate: formatDateInput(addDays(today, -6)),
       endDate: formatDateInput(today),
     };
   });
@@ -754,14 +766,32 @@ function App() {
     setClaimQueryResult(null);
   }
 
-  function requestAdminPassword() {
-    const password = window.prompt("请输入管理密码");
-    if (password === null) return null;
-    return password.trim();
+  function requestSensitiveAction(label, action) {
+    setSensitiveActionError("");
+    setSensitiveAction({ label, action });
   }
 
-  async function saveConfig(adminPassword = requestAdminPassword()) {
-    if (adminPassword === null) return false;
+  async function submitSensitiveAction(password) {
+    if (!sensitiveAction) return;
+    setSensitiveActionSubmitting(true);
+    setSensitiveActionError("");
+    try {
+      await sensitiveAction.action(password.trim());
+      setSensitiveAction(null);
+    } catch (error) {
+      setSensitiveActionError(error.message || "管理员验证失败");
+    } finally {
+      setSensitiveActionSubmitting(false);
+    }
+  }
+
+  function cancelSensitiveAction() {
+    if (sensitiveActionSubmitting) return;
+    setSensitiveAction(null);
+    setSensitiveActionError("");
+  }
+
+  async function persistConfig(adminPassword) {
     const dataToSave = {
       ...config,
       fieldMap: buildFieldMap(fieldMappings),
@@ -787,20 +817,22 @@ function App() {
       return true;
     } catch (error) {
       setSaveState({ ok: false, text: error.message });
-      return false;
+      throw error;
     } finally {
       setSaving(false);
     }
   }
 
-  async function checkConnection() {
-    const adminPassword = requestAdminPassword();
-    if (adminPassword === null) return;
+  function saveConfig() {
+    requestSensitiveAction("保存配置", persistConfig);
+  }
+
+  async function saveAndVerifyConnection(adminPassword, { forceRefresh = false } = {}) {
+    if (forceRefresh) setRefreshingConfig(true);
     setChecking(true);
     setCheckState(null);
     try {
-      const saved = await saveConfig(adminPassword);
-      if (!saved) return;
+      await persistConfig(adminPassword);
       const response = await fetch("/api/check-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -808,7 +840,12 @@ function App() {
       });
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
-      setCheckState({ ok: true, text: `${data.message}，读取到 ${data.fieldCount} 个字段` });
+      setCheckState({
+        ok: true,
+        text: forceRefresh
+          ? `新表格地址已保存并生效，读取到 ${data.fieldCount} 个字段`
+          : `${data.message}，读取到 ${data.fieldCount} 个字段`,
+      });
       if (data.fields) {
         setBitableFields(data.fields);
         const existing = invertFieldMap(status?.fieldMap);
@@ -818,11 +855,31 @@ function App() {
         }
         setFieldMappings(merged);
       }
+      if (forceRefresh) {
+        statusResultsRef.current = {};
+        setStatusResultsByKey({});
+        setOwnerStats(null);
+        await loadHealthStatus();
+      }
     } catch (error) {
       setCheckState({ ok: false, text: error.message });
+      throw error;
     } finally {
       setChecking(false);
+      if (forceRefresh) setRefreshingConfig(false);
     }
+  }
+
+  function checkConnection() {
+    requestSensitiveAction("测试连接", async (adminPassword) => {
+      await saveAndVerifyConnection(adminPassword);
+    });
+  }
+
+  function forceRefreshConfig() {
+    requestSensitiveAction("强制刷新表格地址", async (adminPassword) => {
+      await saveAndVerifyConnection(adminPassword, { forceRefresh: true });
+    });
   }
 
   async function uploadSpreadsheets() {
@@ -906,7 +963,6 @@ function App() {
         body: JSON.stringify({
           materialCodes,
           senderName: claimForm.senderName.trim(),
-          ...statusDateRange,
           tableKey: targetTable,
         }),
       });
@@ -937,14 +993,16 @@ function App() {
       const response = await fetch("/api/complete-drawing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ materialCodes, ...statusDateRange, tableKey: targetTable }),
+        body: JSON.stringify({ materialCodes, tableKey: targetTable }),
       });
       const data = await response.json();
       if (!data.ok) throw new Error(data.error);
       setClaimState({
         ok: true,
         operation: "complete",
-        text: `绘图完成：${data.materialCodes.join("，")}，共更新 ${data.count} 条记录`,
+        text: data.adminOverrideCount > 0
+          ? `管理员已代为完成：${data.materialCodes.join("，")}，共更新 ${data.count} 条记录`
+          : `绘图完成：${data.materialCodes.join("，")}，共更新 ${data.count} 条记录`,
         data,
       });
     } catch (error) {
@@ -1056,7 +1114,7 @@ function App() {
       if (!data.ok) throw new Error(data.error);
       setStatusState({
         ok: true,
-        text: `用时重算完成：检查 ${data.summary.scanned} 条，可计算 ${data.summary.eligible} 条，更新 ${data.summary.updated} 条，缺少时间 ${data.summary.missingTime} 条`,
+        text: `用时重算完成：检查 ${data.summary.scanned} 条，可计算 ${data.summary.eligible} 条，更新 ${data.summary.updated} 条，缺少时间 ${data.summary.missingTime} 条，跳过空白 ${data.summary.skippedBlank || 0} 条`,
       });
       await fetchTableStatus(targetTable, { ...statusDateRange }, { force: true });
     } catch (error) {
@@ -1084,7 +1142,6 @@ function App() {
           cachedResults[cacheKey] = {
             table: tableKey,
             summary: tableStatus.lastSummary,
-            items: existing?.items || [],
             source: "background",
             refreshedAt,
           };
@@ -1373,8 +1430,10 @@ function App() {
             saving={saving}
             savingConfig={savingConfig}
             checking={checking}
+            refreshingConfig={refreshingConfig}
             saveConfig={saveConfig}
             checkConnection={checkConnection}
+            forceRefreshConfig={forceRefreshConfig}
             formatDisplayTime={formatDisplayTime}
           />
         </React.Suspense>
@@ -1467,6 +1526,8 @@ function App() {
             setStatusDateRange={setStatusDateRange}
             statusSyncing={statusSyncing}
             backgroundSyncStatus={backgroundSyncStatus}
+            healthStatus={healthStatus}
+            healthLoading={healthLoading}
             statusResult={statusResult}
             statusState={statusState}
             syncDrawingStatus={syncDrawingStatus}
@@ -1552,6 +1613,17 @@ function App() {
         error={adminError}
         onSubmit={submitAdminAccess}
         onCancel={cancelAdminAccess}
+      />
+      <AdminAccessGate
+        open={Boolean(sensitiveAction)}
+        targetLabel={sensitiveAction?.label || "敏感操作"}
+        title="再次验证管理员密码"
+        description={`执行“${sensitiveAction?.label || "该操作"}”前，请再次输入管理员密码。`}
+        submitLabel="验证并继续"
+        loading={sensitiveActionSubmitting}
+        error={sensitiveActionError}
+        onSubmit={submitSensitiveAction}
+        onCancel={cancelSensitiveAction}
       />
     </>
   );

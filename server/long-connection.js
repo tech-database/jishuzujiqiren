@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { recentShanghaiDateRange } from "./date-range.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -15,6 +16,11 @@ import {
   syncDrawingStatuses,
   writeFromText,
 } from "./bot-core.js";
+import { chineseBotErrorMessage } from "./bot-reply-language.js";
+import { MessageIdempotency, trimSetToRecent } from "./message-idempotency.js";
+import { spreadsheetSessionKey } from "./spreadsheet-session.js";
+import { pollPendingSpreadsheetSessions } from "./spreadsheet-session-polling.js";
+import { websocketHeartbeatStatus } from "./websocket-status.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.join(__dirname, ".runtime");
@@ -33,36 +39,72 @@ const NO_FILES_REPLY = "\u672c\u6b21\u65b0\u589e\u672a\u6536\u5230\u4f60\u4e0a\u
 const HISTORY_PERMISSION_ERROR =
   "\u65e0\u6cd5\u4e3b\u52a8\u8bfb\u53d6\u7fa4\u6d88\u606f\u5386\u53f2\uff0c\u9700\u8981\u5728\u98de\u4e66\u5f00\u653e\u5e73\u53f0\u4e3a\u5e94\u7528\u5f00\u542f\u6743\u9650 im:message.group_msg\uff0c\u53d1\u5e03\u540e\u91cd\u542f\u673a\u5668\u4eba\u3002";
 const ACTIVATION_TTL_MS = 10 * 60 * 1000;
+const COMPLETION_MESSAGE_HISTORY_LIMIT = 100;
+const FILE_MESSAGE_HISTORY_LIMIT = 300;
 const pendingSpreadsheetChats = new Map();
 const processedCompletionMessageIds = new Set();
 const processedFileMessageIds = new Set();
 const processingCompletionKeys = new Set();
+let processedStateWriteQueue = Promise.resolve();
+let websocketStatusWriteQueue = Promise.resolve();
+let websocketRuntimeStatus = {
+  connected: false,
+  state: "idle",
+  message: "\u98de\u4e66\u957f\u8fde\u63a5\u672a\u8fde\u63a5",
+};
+const commandIdempotency = new MessageIdempotency({
+  onChange: () => saveProcessedSpreadsheetState(),
+  onPersistError: (error) => {
+    console.error("Failed to persist command idempotency state:", error);
+  },
+});
 
 async function loadProcessedSpreadsheetState() {
   try {
     const data = JSON.parse(await readFile(spreadsheetProcessedPath, "utf8"));
     for (const id of data.completions || []) processedCompletionMessageIds.add(id);
     for (const id of data.files || []) processedFileMessageIds.add(id);
+    trimSetToRecent(processedCompletionMessageIds, COMPLETION_MESSAGE_HISTORY_LIMIT);
+    trimSetToRecent(processedFileMessageIds, FILE_MESSAGE_HISTORY_LIMIT);
+    commandIdempotency.restore(data.commands || []);
   } catch {
     // Runtime idempotency state is best-effort; missing files are normal on first boot.
   }
 }
 
 async function saveProcessedSpreadsheetState() {
-  await mkdir(runtimeDir, { recursive: true });
-  await writeFile(
-    spreadsheetProcessedPath,
-    JSON.stringify(
-      {
-        updatedAt: new Date().toISOString(),
-        completions: [...processedCompletionMessageIds].slice(-500),
-        files: [...processedFileMessageIds].slice(-1000),
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  processedStateWriteQueue = processedStateWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      trimSetToRecent(processedCompletionMessageIds, COMPLETION_MESSAGE_HISTORY_LIMIT);
+      trimSetToRecent(processedFileMessageIds, FILE_MESSAGE_HISTORY_LIMIT);
+      await mkdir(runtimeDir, { recursive: true });
+      await writeFile(
+        spreadsheetProcessedPath,
+        JSON.stringify(
+          {
+            updatedAt: new Date().toISOString(),
+            completions: [...processedCompletionMessageIds],
+            files: [...processedFileMessageIds],
+            commands: commandIdempotency.snapshot(),
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+    });
+  await processedStateWriteQueue;
+}
+
+async function handleWriteCommandOnce(message, commandName, handler) {
+  const outcome = await commandIdempotency.run(message.messageId, handler);
+  if (outcome.skipped) {
+    console.log(
+      `Duplicate ${commandName} skipped: message=${message.messageId} state=${outcome.status}.`,
+    );
+  }
+  return outcome;
 }
 
 async function writeWebsocketStatus(status) {
@@ -82,25 +124,17 @@ async function writeWebsocketStatus(status) {
   );
 }
 
-function formatDateInput(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date, days) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+function persistWebsocketRuntimeStatus(status) {
+  websocketRuntimeStatus = { ...websocketRuntimeStatus, ...status };
+  const snapshot = { ...websocketRuntimeStatus };
+  websocketStatusWriteQueue = websocketStatusWriteQueue
+    .catch(() => {})
+    .then(() => writeWebsocketStatus(snapshot));
+  return websocketStatusWriteQueue;
 }
 
 function defaultStatusDateRange() {
-  const today = new Date();
-  return {
-    startDate: formatDateInput(addDays(today, -2)),
-    endDate: formatDateInput(today),
-  };
+  return recentShanghaiDateRange(7);
 }
 
 function parseCommandDates(content) {
@@ -114,13 +148,6 @@ function parseCommandDates(content) {
 function commandDateRange(content) {
   const dates = parseCommandDates(content);
   if (dates.length === 0) return defaultStatusDateRange();
-  if (dates.length === 1) return { startDate: dates[0], endDate: dates[0] };
-  return { startDate: dates[0], endDate: dates[1] };
-}
-
-function optionalCommandDateRange(content) {
-  const dates = parseCommandDates(content);
-  if (dates.length === 0) return {};
   if (dates.length === 1) return { startDate: dates[0], endDate: dates[0] };
   return { startDate: dates[0], endDate: dates[1] };
 }
@@ -167,7 +194,7 @@ function commandHelpText() {
     "5. @机器人 查询未领取：分别统计胶板、油漆和合计；也可发送 胶板查询未领取 / 油漆查询未领取 单独查询",
     "6. @机器人 状态检测：按默认日期范围同步状态并返回数量",
     "7. @机器人 获取ID：回复发送人的飞书用户 ID",
-    "日期范围可选：在口令后追加 2026-07-11 2026-07-13；不写则默认前天、昨天、今天。",
+    "日期范围仅用于状态检测：在口令后追加 2026-07-11 2026-07-13；不写则默认最近7天。",
   ].join("\n");
 }
 
@@ -220,13 +247,11 @@ async function downloadResourceBySdk(messageId, fileKey) {
 }
 
 async function handleDrawClaim(message) {
-  const range = optionalCommandDateRange(message.content);
   const materialCodes = extractMaterialCodes(message.content);
   const result = await claimDrawingOwners({
     materialCodes,
     senderName: message.senderName,
     senderId: message.senderId,
-    ...range,
   });
   const claimedCodes = [...new Set(result.map((item) => item.materialCode))].join("\uFF0C");
   console.log(
@@ -238,11 +263,21 @@ async function handleDrawClaim(message) {
 }
 
 async function handleDrawingComplete(message) {
-  const range = optionalCommandDateRange(message.content);
   const materialCodes = extractMaterialCodes(message.content);
-  const result = await completeDrawings({ materialCodes, ...range });
+  const result = await completeDrawings({
+    materialCodes,
+    senderName: message.senderName,
+    senderId: message.senderId,
+  });
+  const updatedCount = result.filter((item) => item.changed).length;
+  const alreadyCompletedCount = result.length - updatedCount;
   const completedCodes = [...new Set(result.map((item) => item.materialCode))].join("\uFF0C");
-  await sendReply(message.chatId, `绘图完成已同步：${completedCodes}，共更新 ${result.length} 条记录。`);
+  const existingText =
+    alreadyCompletedCount > 0 ? `，其中 ${alreadyCompletedCount} 条原本已完成，未覆盖完成时间` : "";
+  await sendReply(
+    message.chatId,
+    `绘图完成已同步：${completedCodes}，匹配 ${result.length} 条，更新 ${updatedCount} 条${existingText}。`,
+  );
 }
 
 async function handleOrderConfirmation(message) {
@@ -301,9 +336,15 @@ async function handleSpreadsheetMessage(message) {
       }
       console.log(`Downloading file: ${resource.fileName || resource.fileKey}`);
       const buffer = await downloadResourceBySdk(message.messageId, resource.fileKey);
-      const records = await parseSpreadsheetBuffer(buffer);
+      const records = await parseSpreadsheetBuffer(buffer, { fileName: resource.fileName });
       const created = await createBitableRecords(records, { tableKey: message.tableKey });
       count += created.length;
+      if (created.warnings?.length > 0) {
+        await sendReply(
+          message.chatId,
+          `${resource.fileName || "上传文件"}：${created.warnings.join("；")}`,
+        );
+      }
     }
   } else {
     const result = await writeFromText(message.content, { tableKey: message.tableKey });
@@ -377,7 +418,7 @@ function isStatusSyncCommand(message) {
 
 function activateSpreadsheetSession(message, tableKey = requireCreateCommandTableKey(message.content)) {
   const now = Date.now();
-  pendingSpreadsheetChats.set(chatKey(message), {
+  pendingSpreadsheetChats.set(spreadsheetSessionKey(message), {
     chatId: message.chatId,
     startedAt: now,
     expiresAt: now + ACTIVATION_TTL_MS,
@@ -388,7 +429,7 @@ function activateSpreadsheetSession(message, tableKey = requireCreateCommandTabl
 }
 
 function getSpreadsheetSession(message) {
-  const key = chatKey(message);
+  const key = spreadsheetSessionKey(message);
   const pending = pendingSpreadsheetChats.get(key);
   if (!pending) return null;
   if (pending.expiresAt < Date.now()) {
@@ -407,7 +448,7 @@ function getSpreadsheetSession(message) {
 }
 
 function endSpreadsheetSession(message) {
-  pendingSpreadsheetChats.delete(chatKey(message));
+  pendingSpreadsheetChats.delete(spreadsheetSessionKey(message));
 }
 
 function parseJsonContent(content) {
@@ -620,7 +661,7 @@ async function processSpreadsheetCompletion(message, pending) {
 async function handleSpreadsheetCompletion(message, pending) {
   const completionMessageId = message.messageId || "";
   const messageProcessingKey = completionMessageId ? `message:${completionMessageId}` : "";
-  const chatProcessingKey = `chat:${chatKey(message)}`;
+  const chatProcessingKey = `session:${spreadsheetSessionKey(message)}`;
 
   if (
     processingCompletionKeys.has(chatProcessingKey) ||
@@ -646,22 +687,31 @@ async function handleSpreadsheetCompletion(message, pending) {
 }
 
 async function pollSpreadsheetSessions() {
-  for (const [key, pending] of [...pendingSpreadsheetChats.entries()]) {
-    if (pending.expiresAt < Date.now()) {
-      pendingSpreadsheetChats.delete(key);
-      continue;
-    }
-    const chatId = pending.chatId || key;
-    const completions = await listSessionCompletionMessages(chatId, pending);
-    if (completions.length === 0) continue;
-    const completion = completions[completions.length - 1];
-    console.log(`Spreadsheet completion recovered by polling for chat=${key}.`);
-    await handleSpreadsheetCompletion(completion, pending);
-  }
+  await pollPendingSpreadsheetSessions({
+    sessions: pendingSpreadsheetChats,
+    listCompletions: listSessionCompletionMessages,
+    handleCompletion: handleSpreadsheetCompletion,
+    onRecovered: (key) => {
+      console.log(`Spreadsheet completion recovered by polling for chat=${key}.`);
+    },
+    onError: (error, key) => {
+      console.error(
+        `Spreadsheet polling failed for session=${key}:`,
+        error?.message || error,
+      );
+    },
+  });
 }
 
 channel.on("message", async (message) => {
   try {
+    if (!websocketRuntimeStatus.connected) {
+      persistWebsocketRuntimeStatus({
+        connected: true,
+        state: "connected",
+        message: "\u98de\u4e66\u957f\u8fde\u63a5\u5df2\u8fde\u63a5",
+      }).catch((error) => console.error("Failed to restore websocket status:", error.message));
+    }
     console.log(
       `Message received: type=${message.messageType || message.type || ""} chat=${message.chatId || ""} sender=${
         message.senderName || message.senderId || ""
@@ -686,11 +736,11 @@ channel.on("message", async (message) => {
       return;
     }
     if (isMentionedMessage(message) && isDrawingCompleteCommand(message)) {
-      await handleDrawingComplete(message);
+      await handleWriteCommandOnce(message, "drawing-complete", () => handleDrawingComplete(message));
       return;
     }
     if (isOrderConfirmationCommand(message)) {
-      await handleOrderConfirmation(message);
+      await handleWriteCommandOnce(message, "order-confirmation", () => handleOrderConfirmation(message));
       return;
     }
     if (isMentionedMessage(message) && isUnclaimedQueryCommand(message)) {
@@ -698,11 +748,11 @@ channel.on("message", async (message) => {
       return;
     }
     if (isMentionedMessage(message) && isStatusSyncCommand(message)) {
-      await handleStatusSync(message);
+      await handleWriteCommandOnce(message, "status-sync", () => handleStatusSync(message));
       return;
     }
     if (isMentionedMessage(message) && isDrawClaimCommand(message.content)) {
-      await handleDrawClaim(message);
+      await handleWriteCommandOnce(message, "draw-claim", () => handleDrawClaim(message));
       return;
     } else {
       const pending = getSpreadsheetSession(message);
@@ -742,13 +792,31 @@ channel.on("message", async (message) => {
   } catch (error) {
     console.error("Message handling failed:", error.message);
     const prefix = isDrawClaimCommand(message.content) ? "领图失败：" : "操作失败：";
-    await sendReply(message.chatId, `${prefix}${error.message}`);
+    await sendReply(message.chatId, `${prefix}${chineseBotErrorMessage(error)}`);
   }
+});
+
+channel.on("reconnecting", () => {
+  console.warn("Feishu websocket is reconnecting.");
+  persistWebsocketRuntimeStatus({
+    connected: false,
+    state: "reconnecting",
+    message: "\u98de\u4e66\u957f\u8fde\u63a5\u6b63\u5728\u91cd\u8fde",
+  }).catch((error) => console.error("Failed to write websocket reconnecting status:", error.message));
+});
+
+channel.on("reconnected", () => {
+  console.log("Feishu websocket reconnected.");
+  persistWebsocketRuntimeStatus({
+    connected: true,
+    state: "connected",
+    message: "\u98de\u4e66\u957f\u8fde\u63a5\u5df2\u91cd\u65b0\u8fde\u63a5",
+  }).catch((error) => console.error("Failed to write websocket reconnected status:", error.message));
 });
 
 channel.on("error", (error) => {
   console.error("Feishu websocket error:", error?.message || error);
-  writeWebsocketStatus({
+  persistWebsocketRuntimeStatus({
     connected: false,
     state: "error",
     message: error?.message || String(error),
@@ -757,21 +825,32 @@ channel.on("error", (error) => {
 
 try {
   console.log("Connecting Feishu websocket...");
-  await writeWebsocketStatus({ connected: false, state: "connecting", message: "正在连接飞书长连接" });
+  await persistWebsocketRuntimeStatus({
+    connected: false,
+    state: "connecting",
+    message: "\u6b63\u5728\u8fde\u63a5\u98de\u4e66\u957f\u8fde\u63a5",
+  });
   await channel.connect();
   console.log("Feishu websocket connected. Waiting for bot messages.");
-  await writeWebsocketStatus({ connected: true, state: "connected", message: "飞书长连接已连接" });
+  await persistWebsocketRuntimeStatus({
+    connected: true,
+    state: "connected",
+    message: "\u98de\u4e66\u957f\u8fde\u63a5\u5df2\u8fde\u63a5",
+  });
   setInterval(() => {
-    writeWebsocketStatus({ connected: true, state: "connected", message: "飞书长连接已连接" }).catch((error) =>
-      console.error("Failed to write websocket heartbeat:", error.message),
+    const heartbeatStatus = websocketHeartbeatStatus(
+      channel.getConnectionStatus?.(),
+      websocketRuntimeStatus,
     );
+    persistWebsocketRuntimeStatus(heartbeatStatus)
+      .catch((error) => console.error("Failed to write websocket heartbeat:", error.message));
   }, 15000);
   setInterval(() => {
     pollSpreadsheetSessions().catch((error) => console.error("Spreadsheet polling failed:", error.message));
   }, 5000);
 } catch (error) {
   console.error("Feishu websocket failed:", error?.message || error);
-  await writeWebsocketStatus({
+  await persistWebsocketRuntimeStatus({
     connected: false,
     state: "failed",
     message: error?.message || String(error),

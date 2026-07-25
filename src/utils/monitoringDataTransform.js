@@ -16,6 +16,9 @@ export function normalizeStatusData(statusResult, backgroundSyncStatus) {
   const drawing = clampCount(rawSummary?.drawing);
   const done = clampCount(rawSummary?.done);
   const updated = clampCount(rawSummary?.updated);
+  const missingClaimTime = clampCount(rawSummary?.missingClaimTime);
+  const missingCompleteTime = clampCount(rawSummary?.missingCompleteTime);
+  const timestampsBackfilled = clampCount(rawSummary?.timestampsBackfilled);
 
   const hasSummary = [total, unclaimed, drawing, done].some((value) => value !== null);
   const knownTotal = total ?? 0;
@@ -32,8 +35,10 @@ export function normalizeStatusData(statusResult, backgroundSyncStatus) {
       done,
       updated,
       abnormal,
+      missingClaimTime,
+      missingCompleteTime,
+      timestampsBackfilled,
     },
-    items: Array.isArray(statusResult?.items) ? statusResult.items : [],
     background: backgroundSyncStatus || null,
   };
 }
@@ -109,9 +114,28 @@ export function buildMetricCards(normalized, backgroundSyncStatus) {
   ];
 }
 
-export function normalizeLogEntries({ backgroundSyncStatus, statusResult, statusState, formatDisplayTime }) {
+export function normalizeLogEntries({
+  backgroundSyncStatus,
+  healthStatus,
+  statusResult,
+  statusState,
+  formatDisplayTime,
+}) {
   const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
   const logs = [];
+
+  if (healthStatus && !healthStatus.ok) {
+    const failedChecks = Object.values(healthStatus.checks || {})
+      .filter((check) => check?.ok === false)
+      .map((check) => check.message)
+      .filter(Boolean);
+    logs.push({
+      id: "health-error",
+      time: now,
+      level: "error",
+      message: `连接健康检查异常：${failedChecks.join("；") || healthStatus.label || "状态未知"}`,
+    });
+  }
 
   if (backgroundSyncStatus?.running) {
     logs.push({

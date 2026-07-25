@@ -50,10 +50,11 @@ export class MemoryCache {
         const value = await loader();
         const current = this.entries.get(key);
         if (current?.promise === promise) {
+          const resolvedTtlMs = typeof ttlMs === "function" ? ttlMs(value) : ttlMs;
           this.entries.delete(key);
           this.entries.set(key, {
             value,
-            expiresAt: this.now() + Math.max(0, Number(ttlMs) || 0),
+            expiresAt: this.now() + Math.max(0, Number(resolvedTtlMs) || 0),
             promise: null,
           });
         }
@@ -99,6 +100,7 @@ export const feishuCache = new MemoryCache();
 
 export const feishuCacheTtl = Object.freeze({
   token: 90 * 60 * 1000,
+  tokenRefreshBuffer: 5 * 60 * 1000,
   fields: 10 * 60 * 1000,
   records: 5 * 1000,
 });

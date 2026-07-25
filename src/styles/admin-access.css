@@ -82,6 +82,13 @@
   cursor: pointer;
 }
 .admin-access-close:hover { color: #172033; background: #f0f4f9; }
+.admin-access-close:disabled { opacity: .45; cursor: not-allowed; }
+.admin-access-close:focus-visible,
+.admin-access-submit:focus-visible,
+.admin-access-dialog input:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.48);
+  outline-offset: 2px;
+}
 
 .admin-login-button,
 .admin-logout-button {

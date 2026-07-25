@@ -333,9 +333,14 @@ export default function HomeDashboard() {
   const controllerRef = useRef(null);
   const requestIdRef = useRef(0);
   const performanceRangeRef = useRef(performanceRange);
+  const lastPerformanceRefreshAtRef = useRef(0);
   const mountedRef = useRef(true);
 
-  const loadDashboard = useCallback(({ force = false, bypassCache = false } = {}) => {
+  const loadDashboard = useCallback(({
+    force = false,
+    bypassCache = false,
+    includePerformance = true,
+  } = {}) => {
     if (requestRef.current && !force) return requestRef.current;
     if (force) controllerRef.current?.abort();
 
@@ -350,6 +355,7 @@ export default function HomeDashboard() {
           refresh: String(Date.now()),
           startDate: selectedRange.startDate,
           endDate: selectedRange.endDate,
+          includePerformance: includePerformance ? "1" : "0",
         });
         if (bypassCache) query.set("forceRefresh", "1");
         const response = await fetch(`/api/home-dashboard?${query}`, {
@@ -360,7 +366,13 @@ export default function HomeDashboard() {
         const result = await response.json();
         if (!result.ok) throw new Error(result.error || "首页数据加载失败");
         if (mountedRef.current && requestId === requestIdRef.current) {
-          setData(result);
+          setData((previous) => ({
+            ...previous,
+            ...result,
+            performance: result.performance || previous?.performance,
+            range: result.performance ? result.range : previous?.range,
+          }));
+          if (result.performanceIncluded) lastPerformanceRefreshAtRef.current = Date.now();
           setError("");
         }
       } catch (requestError) {
@@ -374,7 +386,7 @@ export default function HomeDashboard() {
       } finally {
         if (mountedRef.current && requestId === requestIdRef.current) {
           setLoading(false);
-          setPerformanceLoading(false);
+          if (includePerformance) setPerformanceLoading(false);
           setManualRefreshing(false);
           requestRef.current = null;
           if (controllerRef.current === controller) controllerRef.current = null;
@@ -406,7 +418,9 @@ export default function HomeDashboard() {
     const scheduleRefresh = () => {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(async () => {
-        await loadDashboard();
+        const includePerformance =
+          Date.now() - lastPerformanceRefreshAtRef.current >= 60000;
+        await loadDashboard({ includePerformance });
         if (mountedRef.current && document.visibilityState !== "hidden") scheduleRefresh();
       }, 10000);
     };

@@ -1,7 +1,12 @@
 import { AnimatePresence } from "framer-motion";
 import { HardDriveUpload } from "lucide-react";
 import { PageTransition } from "../motion";
-import { IMPORT_FILE_EXTENSIONS, IMPORT_FILE_MAX_BYTES, formatFileSize } from "../../utils/importFileUtils";
+import {
+  IMPORT_FILE_EXTENSIONS,
+  IMPORT_FILE_MAX_BYTES,
+  IMPORT_ROW_LIMIT,
+  formatFileSize,
+} from "../../utils/importFileUtils";
 import FileDropZone from "./FileDropZone";
 import ImportActionBar from "./ImportActionBar";
 import ImportErrorPanel from "./ImportErrorPanel";
@@ -34,7 +39,9 @@ export default function DataImportCenter({
           <div className="import-target-row">
             <span><HardDriveUpload size={17} />写入目标</span>
             {tableSelector}
-            <small>支持 {IMPORT_FILE_EXTENSIONS.join(" / ")} · 最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)}</small>
+            <small>
+              支持 {IMPORT_FILE_EXTENSIONS.join(" / ")} · 最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)} · 每个文件最多 {IMPORT_ROW_LIMIT} 行
+            </small>
           </div>
 
           <FileDropZone
@@ -78,6 +85,7 @@ export default function DataImportCenter({
             <h2>执行规则</h2>
             <span>目标：{targetTable === "paint" ? "油漆" : "胶板"}数据表</span>
             <span>自动读取首个工作表</span>
+            <span>每个文件最多写入 {IMPORT_ROW_LIMIT} 行</span>
             <span>按当前字段映射写入</span>
           </section>
         </aside>
