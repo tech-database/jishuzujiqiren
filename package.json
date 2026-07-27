@@ -6,7 +6,19 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "test": "node --test server/*.test.js",
+    "test": "npm run test:server && npm run test:frontend",
+    "test:server": "node --test server/*.test.js",
+    "test:frontend": "node --test \"src/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "check:source-unused": "node scripts/check-unused-components.mjs",
+    "check:css": "node scripts/check-css-duplicates.mjs",
+    "check:css-unused": "node scripts/check-unused-css.mjs",
+    "optimize:css": "node scripts/check-css-duplicates.mjs --fix && node scripts/check-unused-css.mjs --fix",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "verify": "npm test && npm run lint && npm run check:architecture && npm run check:source-unused && npm run check:css && npm run check:css-unused && npm run build && npm run check:bundle",
+    "verify:full": "npm run verify && npm run test:e2e",
     "server": "node server/index.js",
     "feishu:ws": "node server/long-connection.js",
     "start": "node server/index.js",
@@ -35,5 +47,13 @@
   "overrides": {
     "axios": "^1.18.1",
     "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.8.0",
+    "postcss": "^8.5.23"
   }
 }

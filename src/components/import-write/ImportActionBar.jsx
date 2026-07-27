@@ -10,7 +10,7 @@ export default function ImportActionBar({ disabled, uploading, files, onReselect
         <GlassButton type="button" variant="secondary" onClick={onReselect} disabled={uploading}>
           <RefreshCw size={16} />重新选择
         </GlassButton>
-        <GlassButton type="button" variant="primary" onClick={onSubmit} disabled={disabled}>
+        <GlassButton data-testid="import-submit" type="button" variant="primary" onClick={onSubmit} disabled={disabled}>
           <UploadCloud size={16} />{uploading ? "正在导入" : "开始导入"}
         </GlassButton>
       </div>

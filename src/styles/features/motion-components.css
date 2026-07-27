@@ -1,0 +1,257 @@
+.hover-motion-card {
+  transition:
+    border-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    background-color var(--motion-base) var(--ease-out);
+}
+
+.hover-motion-card:hover {
+  border-color: rgba(22, 119, 255, 0.32);
+  box-shadow:
+    var(--shadow-card-hover),
+    0 0 0 1px rgba(22, 119, 255, 0.08);
+}
+
+.button.primary:hover {
+  box-shadow:
+    0 16px 32px rgba(22, 119, 255, 0.3),
+    0 0 28px rgba(22, 119, 255, 0.28);
+}
+
+.live-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 0 13px;
+  color: var(--color-primary);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.live-status-indicator.online {
+  color: var(--color-success);
+}
+
+.live-status-indicator.running {
+  color: var(--color-cyan);
+}
+
+.live-status-indicator.standby {
+  color: var(--color-warning);
+}
+
+.live-status-indicator.error {
+  color: var(--color-danger);
+}
+
+.live-status-dot {
+  position: relative;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.live-status-dot::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border: 1px solid currentColor;
+  border-radius: inherit;
+  opacity: 0.35;
+  animation: status-ripple 1.8s var(--ease-out) infinite;
+}
+
+.live-status-copy {
+  display: grid;
+  gap: 1px;
+}
+
+.live-status-copy strong {
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+.live-status-copy small {
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.robot-status-widget {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(238, 245, 255, 0.5)),
+    radial-gradient(circle at 8% 0%, rgba(0, 194, 255, 0.16), transparent 240px);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.monitor-metric-card.success strong {
+  color: var(--color-success);
+}
+
+.monitor-metric-card.warning strong {
+  color: var(--color-warning);
+}
+
+.monitor-metric-card.danger strong {
+  color: var(--color-danger);
+}
+
+.progress-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 160px;
+  height: 160px;
+}
+
+.progress-ring svg {
+  width: 160px;
+  height: 160px;
+  transform: rotate(-90deg);
+}
+
+.progress-ring-track,
+.progress-ring-value {
+  fill: none;
+  stroke-width: 10;
+}
+
+.progress-ring-track {
+  stroke: rgba(22, 119, 255, 0.12);
+}
+
+.progress-ring-value {
+  stroke: url("#progressGradient");
+  stroke: var(--color-primary);
+  stroke-linecap: round;
+}
+
+.progress-ring > span {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+}
+
+.progress-ring strong {
+  color: var(--color-ink);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.progress-ring small {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.monitor-detail-stack.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.monitor-control-panel .status-filter-bar {
+  margin-top: 0;
+}
+
+.live-log {
+  display: grid;
+  gap: 9px;
+  max-height: 300px;
+  overflow: hidden;
+  margin-top: 16px;
+}
+
+.live-log-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+  border: 1px solid rgba(22, 119, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
+  padding: 9px 11px;
+}
+
+.live-log-row time {
+  color: var(--color-subtle);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.live-log-row span {
+  min-width: 0;
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.live-log-row.success {
+  border-color: rgba(34, 197, 94, 0.18);
+}
+
+.live-log-row.running {
+  border-color: rgba(0, 194, 255, 0.2);
+}
+
+.live-log-row.error {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+@keyframes status-ripple {
+  from {
+    transform: scale(0.7);
+    opacity: 0.45;
+  }
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1040px) {
+
+  .robot-status-widget {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .monitoring-metrics,
+  .robot-status-metrics,
+  .progress-panel-body,
+  .monitor-detail-stack.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-ring {
+    margin: 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-status-dot::after {
+    animation: none !important;
+  }
+}
+

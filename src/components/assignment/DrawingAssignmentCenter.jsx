@@ -20,7 +20,6 @@ export default function DrawingAssignmentCenter({
   queryingClaims,
   configReady,
   updateClaimForm,
-  removeMaterialCode,
   clearClaimForm,
   claimDrawing,
   completeDrawing,

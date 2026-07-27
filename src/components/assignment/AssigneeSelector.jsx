@@ -23,6 +23,7 @@ export default function AssigneeSelector({ value, peopleRows, disabled, error, o
         <span>领取人姓名</span>
         <input
           id="assignment-assignee"
+          data-testid="assignee-input"
           value={value}
           disabled={disabled}
           placeholder="请输入领取人姓名"

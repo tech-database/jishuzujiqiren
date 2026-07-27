@@ -6,6 +6,7 @@ export default function MaterialCodeInput({ value, summary, disabled, error, onC
       </div>
       <textarea
         id="assignment-material-codes"
+        data-testid="material-code-input"
         value={value}
         disabled={disabled}
         rows={4}

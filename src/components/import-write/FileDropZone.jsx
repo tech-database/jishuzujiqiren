@@ -37,6 +37,7 @@ export default function FileDropZone({
         <p>支持 Excel / CSV · 单个文件最大 {formatFileSize(IMPORT_FILE_MAX_BYTES)}</p>
       </div>
       <input
+        data-testid="import-file-input"
         ref={fileInputRef}
         type="file"
         accept={IMPORT_FILE_ACCEPT}

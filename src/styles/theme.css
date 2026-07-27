@@ -200,10 +200,6 @@
   color: var(--color-primary);
 }
 
-.page-enter {
-  animation: page-enter var(--motion-slow) var(--ease-out) both;
-}
-
 @keyframes page-enter {
   from {
     opacity: 0;

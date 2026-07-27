@@ -1,0 +1,452 @@
+/* Drawing assignment step workbench */
+.assignment-center { gap: 12px; }
+
+.assignment-flow-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #dce5f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(31, 72, 124, 0.05);
+}
+
+.assignment-flow-strip > span {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 1px 10px;
+  min-height: 66px;
+  border-right: 1px solid #e5ebf2;
+  padding: 10px 14px;
+}
+
+.assignment-flow-strip > span:last-child { border-right: 0; }
+
+.assignment-flow-strip i {
+  display: grid;
+  grid-row: 1 / 3;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  color: #7a889b;
+  background: #f4f7fa;
+  font-style: normal;
+}
+
+.assignment-flow-strip small {
+  color: #8b98a9;
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+.assignment-flow-strip strong {
+  color: #46566c;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.assignment-flow-strip > span.active { background: #f3f7ff; }
+.assignment-flow-strip > span.active i { color: #2563eb; background: #e7f0ff; }
+.assignment-flow-strip > span.active strong { color: #245fbd; }
+.assignment-flow-strip > span.done i { color: #168252; background: #edf9f3; }
+.assignment-flow-strip > span.done strong { color: #176b49; }
+
+.assignment-layout {
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.65fr);
+  gap: 14px;
+}
+
+.assignment-form-panel {
+  gap: 12px;
+  border-color: #dce5f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 4px 8px rgba(31, 72, 124, 0.05);
+}
+
+.assignment-field-card {
+  gap: 11px;
+  border-color: #e1e8f2;
+  border-radius: 11px;
+  background: #fbfcfe;
+  padding: 14px;
+  box-shadow: none;
+}
+
+.assignment-step-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.assignment-step-heading > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 8px;
+  color: #2563eb;
+  background: #eaf2ff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assignment-step-heading h2 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.assignment-step-heading p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.assignment-step-heading.compact { align-items: center; }
+
+.assignment-field-card textarea {
+  min-height: 104px;
+  max-height: 180px;
+  border-color: #d6e0ec;
+  border-radius: 9px;
+  color: #1e293b;
+  background: #fff;
+  padding: 11px 12px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.assignment-input-meta {
+  color: #58677c;
+  font-size: 0.75rem;
+}
+
+.assignment-input-meta strong { color: #2563eb; }
+
+.assignment-person-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assignment-person-list button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 9px;
+  min-height: 58px;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  color: #334155;
+  background: #fff;
+  padding: 9px 10px;
+}
+
+.assignment-person-list button:hover {
+  border-color: #a9c3ef;
+  background: #f5f8ff;
+  transform: none;
+}
+
+.assignment-person-list button.selected {
+  border-color: #6f97e9;
+  background: #eef4ff;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.assignment-person-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: #3975dd;
+  background: #eaf2ff;
+}
+
+.assignment-person-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.assignment-person-copy strong {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignment-person-copy small {
+  color: #718096;
+  font-size: 0.6875rem;
+}
+
+.assignment-person-choice {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid #cbd6e4;
+  border-radius: 50%;
+  color: transparent;
+}
+
+.assignment-person-list button.selected .assignment-person-choice {
+  border-color: #2563eb;
+  color: #fff;
+  background: #2563eb;
+}
+
+.assignment-manual-assignee { display: grid; gap: 7px; color: #334155; font-size: 0.8125rem; }
+.assignment-manual-assignee input { min-height: 42px; border-radius: 9px; padding: 0 11px; }
+
+.assignment-action-bar {
+  align-items: center;
+  border-top: 1px solid #e8edf4;
+  padding: 12px 0 0;
+}
+
+.assignment-action-bar > div:first-child,
+.assignment-action-bar > div:last-child { display: flex; width: 100%; justify-content: flex-end; }
+.assignment-action-bar .glass-button { min-height: 36px; }
+
+.assignment-summary-panel {
+  top: 14px;
+  gap: 14px;
+  border-color: #dce5f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 4px 8px rgba(31, 72, 124, 0.05);
+}
+
+.assignment-summary-panel.ready { border-color: #b9d5ff; }
+
+.assignment-live-summary {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #e3e9f1;
+  border-radius: 10px;
+}
+
+.assignment-live-summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  border-bottom: 1px solid #e8edf4;
+  padding: 8px 11px;
+}
+
+.assignment-live-summary > div:last-child { border-bottom: 0; }
+.assignment-live-summary small { color: #64748b; font-size: 0.75rem; }
+.assignment-live-summary strong { max-width: 55%; overflow: hidden; color: #1e293b; font-size: 0.8125rem; text-overflow: ellipsis; white-space: nowrap; }
+
+.assignment-summary-submit { justify-content: center; width: 100%; min-height: 42px; }
+
+.assignment-duplicate-note {
+  margin: 0;
+  border-radius: 8px;
+  color: #96600b;
+  background: #fff7e8;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+}
+
+.assignment-submit-state,
+.assignment-current-assignee {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  color: #58677c;
+  background: #f7f9fc;
+  padding: 7px 9px;
+  font-size: 0.75rem;
+}
+
+.assignment-result-panel,
+.assignment-error-panel {
+  border-radius: 12px;
+  padding: 13px 15px;
+}
+
+.assignment-result-panel {
+  position: sticky;
+  z-index: 25;
+  top: 10px;
+  align-items: center;
+  border-color: #bfe8d2;
+  background: #eef9f3;
+  box-shadow: 0 5px 12px rgba(28, 112, 75, 0.08);
+}
+
+.assignment-result-panel h2 { font-size: 0.9375rem; }
+.assignment-result-panel p { color: #376b56; }
+
+.assignment-query-panel {
+  gap: 14px;
+  border-color: #dce5f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 4px 8px rgba(31, 72, 124, 0.05);
+}
+
+.assignment-query-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.assignment-query-list article {
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #fff;
+  padding: 13px;
+}
+
+.assignment-query-list code {
+  color: #2563eb;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.assignment-query-list dl { display: grid; gap: 7px; margin: 0; }
+.assignment-query-list dl > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.assignment-query-list dt { color: #718096; font-size: 0.6875rem; }
+.assignment-query-list dd { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: #46566c; font-size: 0.75rem; font-weight: 600; }
+.assignment-query-list dl > div:first-child dd { color: #a96808; }
+
+@media (max-width: 1050px) {
+  .assignment-layout { grid-template-columns: 1fr; }
+  .assignment-summary-panel { position: static; }
+}
+
+@media (max-width: 760px) {
+  .assignment-flow-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .assignment-flow-strip > span:nth-child(2) { border-right: 0; }
+  .assignment-flow-strip > span:nth-child(-n + 2) { border-bottom: 1px solid #e5ebf2; }
+  .assignment-person-list,
+  .assignment-query-list { grid-template-columns: 1fr; }
+  .assignment-action-bar > div:last-child { justify-content: stretch; }
+  .assignment-action-bar .glass-button { flex: 1 1 auto; }
+}
+
+/* Global product typography scale */
+body {
+  font-size: var(--text-size-body);
+  font-kerning: normal;
+}
+
+button,
+input,
+textarea,
+select {
+  font-size: var(--text-size-ui);
+}
+
+.header-main h1,
+.assignment-workbench-head h1 {
+  font-size: var(--font-page-title);
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.section-title-block h2,
+.connection-section-head h3,
+.connection-status-copy strong,
+.command-hero-copy h2,
+.robot-command-card h2,
+.drawing-operator-title h2,
+.import-process-steps h2,
+.assignment-step-heading h2,
+.assignment-result-panel h2,
+.assignment-query-panel h2,
+.people-center h2 {
+  font-size: var(--font-section-title);
+  line-height: 1.35;
+  font-weight: 650;
+}
+
+.header-main p,
+.section-title-block p,
+.connection-section-head p,
+.command-hero-copy p,
+.monitoring-hero .section-title-block p,
+.assignment-workbench-head p,
+.assignment-step-heading p,
+.import-result-copy p,
+.import-error-copy p {
+  font-size: var(--text-size-ui);
+  line-height: 1.55;
+}
+
+.secure-field-label,
+.control-field-label,
+.person-field label,
+.monitoring-date-field label,
+.assignment-field-label,
+.field-row strong,
+.target-table-row > span,
+.import-target-row > span,
+.drawing-current-task > span {
+  font-size: var(--text-size-ui);
+  font-weight: 600;
+}
+
+.secure-field-hint,
+.control-field-label small,
+.person-field small,
+.assignment-field-label small,
+.connection-status-copy span,
+.connection-status-meta,
+.drawing-operator-metrics small,
+.import-file-card-copy span,
+.assignment-live-summary small {
+  font-size: var(--text-size-sm);
+  line-height: 1.45;
+}
+
+.pill,
+.status-badge,
+.glass-button,
+.button {
+  font-size: var(--text-size-sm);
+}
+
+.status-overview.robot-status-widget .status-overview-copy > small {
+  font-size: var(--text-size-sm);
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.status-overview.robot-status-widget .status-overview-item .status-overview-copy > strong,
+.status-overview.robot-status-widget .status-overview-item .status-overview-copy > .animated-number {
+  color: #172033;
+  font-size: var(--text-size-metric);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.status-overview.robot-status-widget .status-overview-copy > span:last-child:not(.animated-number) {
+  color: #718096;
+  font-size: var(--text-size-sm);
+  line-height: 1.35;
+  font-weight: 500;
+}

@@ -6,6 +6,7 @@ import MaterialCodeInput from "../assignment/MaterialCodeInput";
 import MaterialCodeList from "../assignment/MaterialCodeList";
 import { buildMaterialCodeSummary, removeMaterialCodeAtIndex } from "../../utils/materialCodeUtils";
 import { sanitizeAssignmentError } from "../../utils/assignmentResultUtils";
+import { confirmOrders } from "../../features/orders/orders.api.js";
 
 export default function OrderConfirmationCenter({ configReady, targetTable, setTargetTable, TableSelector }) {
   const [materialCodes, setMaterialCodes] = useState("");
@@ -44,13 +45,8 @@ export default function OrderConfirmationCenter({ configReady, targetTable, setT
     setError("");
     setState(null);
     try {
-      const response = await fetch("/api/confirm-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ materialCodes: summary.uniqueCodes, tableKey: targetTable }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.ok) throw new Error(data.error || "下单确认失败");
+      const data = await confirmOrders(summary.uniqueCodes, targetTable);
+      if (!data.ok) throw new Error(data.error || "下单确认失败");
       setState({ ok: true, data });
     } catch (requestError) {
       setState({ ok: false, text: sanitizeAssignmentError(requestError) });
@@ -139,6 +135,7 @@ export default function OrderConfirmationCenter({ configReady, targetTable, setT
                   清空
                 </GlassButton>
                 <GlassButton
+                  data-testid="order-submit"
                   type="button"
                   variant="primary"
                   onClick={submit}

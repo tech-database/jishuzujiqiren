@@ -1,0 +1,337 @@
+/* Compact command workspace */
+.command-center {
+  gap: 12px;
+}
+
+.command-page-header.page-header {
+  min-height: 76px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #d8e2ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 8px rgba(35, 55, 85, 0.06);
+}
+
+.command-page-header.page-header:hover {
+  border-color: #c9d8ea;
+  background: #fff;
+  box-shadow: 0 4px 8px rgba(35, 55, 85, 0.06);
+  transform: none;
+}
+
+.command-page-header .app-mark {
+  display: grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #cfe0ff;
+  border-radius: 11px;
+  color: #3975dd;
+  background: #edf4ff;
+}
+
+.command-page-header .header-main {
+  align-items: center;
+  gap: 12px;
+}
+
+.command-page-header .header-main h1 {
+  font-size: 21px;
+}
+
+.command-page-header .header-main p {
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
+.command-page-header .status-badge,
+.robot-command-card .status-badge {
+  min-height: 24px;
+  padding-inline: 9px;
+  font-size: 11px;
+}
+
+.command-toolbar {
+  min-height: 54px;
+  padding: 5px 7px 5px 10px;
+  border-color: #d8e2ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 3px 7px rgba(35, 55, 85, 0.05);
+}
+
+.command-search-field {
+  flex-basis: 640px;
+  min-height: 42px;
+  border-color: #dce5f0;
+  background: #f6f9fd;
+}
+
+.command-search-field input {
+  height: 40px;
+}
+
+.command-toolbar-meta {
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+
+.command-count-label,
+.command-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.command-count-label {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 999px;
+  color: #59697d;
+  background: #f1f4f8;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.command-refresh-button {
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cbdcf4;
+  border-radius: 10px;
+  color: #245fbd;
+  background: #f4f8ff;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.command-refresh-button:hover {
+  border-color: #a9c6ef;
+  background: #eaf2ff;
+}
+
+.command-refresh-button:active {
+  transform: translateY(1px);
+}
+
+.command-refresh-button:focus-visible,
+.robot-command-code-row button:focus-visible {
+  outline: 3px solid rgba(57, 117, 221, 0.2);
+  outline-offset: 2px;
+}
+
+.robot-command-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.robot-command-card-shell,
+.robot-command-card {
+  height: 100%;
+}
+
+.robot-command-card {
+  display: flex;
+  min-height: 232px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-color: #d8e2ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 8px rgba(35, 55, 85, 0.06);
+}
+
+.robot-command-card:hover {
+  border-color: #bcd0e8;
+  background: #fff;
+  box-shadow: 0 5px 8px rgba(35, 55, 85, 0.08);
+  transform: translateY(-1px);
+}
+
+.robot-command-card__top {
+  min-height: 32px;
+}
+
+.robot-command-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.robot-command-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.robot-command-card h2 {
+  font-size: 15px;
+}
+
+.robot-command-block {
+  display: grid;
+  gap: 4px;
+}
+
+.robot-command-label {
+  color: #66758a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.robot-command-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid #cfe0fa;
+  border-radius: 9px;
+  background: #eef5ff;
+}
+
+.robot-command-code-row button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: #3975dd;
+  background: transparent;
+}
+
+.robot-command-code-row button:hover {
+  background: #dceaff;
+}
+
+.robot-command-card .robot-command-code-row code,
+.robot-command-card .robot-command-block--example code {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.robot-command-block--example {
+  padding: 5px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f6f8fb;
+}
+
+.robot-command-block--example .robot-command-label {
+  color: #7a8798;
+}
+
+.robot-command-card > p {
+  display: -webkit-box;
+  min-height: 30px;
+  overflow: hidden;
+  color: #59697d;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.robot-command-actions {
+  margin-top: auto;
+  gap: 7px;
+  padding-top: 0;
+}
+
+.robot-command-actions .glass-button {
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.command-readonly-note {
+  min-height: 48px;
+  margin-top: 4px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-color: #f0d7a5;
+  border-radius: 12px;
+  color: #704400;
+  background: #fff7e8;
+}
+
+.command-readonly-note > svg {
+  flex: 0 0 auto;
+  color: #a96808;
+}
+
+.command-readonly-note strong {
+  font-size: 13px;
+}
+
+.command-readonly-note span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (min-width: 1441px) {
+  .robot-command-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  .command-hero-panel,
+  .command-toolbar {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .robot-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .command-page-header.page-header,
+  .command-hero-panel,
+  .command-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .command-page-header .header-status {
+    display: flex;
+  }
+
+  .command-toolbar-meta {
+    justify-content: space-between;
+  }
+
+  .robot-command-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .command-readonly-note {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .command-readonly-note span {
+    flex-basis: 100%;
+    padding-left: 28px;
+  }
+}
+

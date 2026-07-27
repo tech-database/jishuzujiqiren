@@ -110,3 +110,23 @@ test("recognizes zip-based xlsx content even when a WPS file uses the xls extens
   assert.equal(records[0]["料号"], "MISNAMED-001");
   assert.equal(records.warnings, undefined);
 });
+
+test("ignores quotation signature and brand-approval footer rows", async () => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("报价数据");
+  sheet.addRow(["料号", "区域", "数量", "产品名称", "备注"]);
+  sheet.addRow(["FOOTER-GUARD-001", "华南区", 2, "柜体", "正常数据"]);
+  sheet.addRow([
+    "",
+    "",
+    "报价员：\n品牌报审：",
+    "报价员：张三\n品牌报审：李四",
+    "审核：王五",
+  ]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+  const records = await parseSpreadsheetBuffer(buffer, { fileName: "带签字尾行.xlsx" });
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]["料号"], "FOOTER-GUARD-001");
+});

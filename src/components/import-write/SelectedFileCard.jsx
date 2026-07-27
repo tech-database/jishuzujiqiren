@@ -45,7 +45,7 @@ export default function SelectedFileCard({ file, disabled, onRemove }) {
     }
     inspectFile();
     return () => { active = false; };
-  }, [file]);
+  }, [file, info.extension]);
 
   return (
     <motion.article className="import-file-card" layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>

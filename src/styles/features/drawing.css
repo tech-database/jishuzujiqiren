@@ -1,0 +1,509 @@
+.drawing-center {
+  display: grid;
+  gap: 18px;
+}
+
+.drawing-skeleton,
+.drawing-loading-grid {
+  min-height: 320px;
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.drawing-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.drawing-loading-grid span,
+.drawing-skeleton {
+  display: block;
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.42), rgba(22, 119, 255, 0.12), rgba(255, 255, 255, 0.42)),
+    rgba(255, 255, 255, 0.48);
+  background-size: 220% 100%;
+  animation: drawing-skeleton 1.4s var(--ease-out) infinite;
+}
+
+.drawing-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.drawing-summary-card {
+  display: grid;
+  gap: 9px;
+  min-height: 118px;
+  padding: 15px;
+}
+
+.drawing-summary-card.wide {
+  grid-column: span 2;
+}
+
+.drawing-summary-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.drawing-summary-card svg {
+  color: var(--color-primary);
+}
+
+.drawing-summary-card strong {
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 24px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawing-summary-card small {
+  color: var(--color-subtle);
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.drawing-search-field button,
+.drawing-detail-header button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--color-primary);
+  background: transparent;
+}
+
+.drawing-search-field button:hover,
+.drawing-detail-header button:hover {
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.drawing-toolbar-actions .glass-button {
+  min-height: 38px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+.drawing-toolbar-actions .glass-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: none;
+}
+
+.drawing-toolbar-actions .spin {
+  animation: drawing-spin 1s linear infinite;
+}
+
+.drawing-operator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.drawing-operator-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 100%;
+  padding: 16px;
+}
+
+.drawing-operator-card.drawing {
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(245, 158, 11, 0.12), transparent 180px),
+    var(--glass-bg);
+}
+
+.drawing-operator-card.idle {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.drawing-operator-head,
+.drawing-operator-title,
+.drawing-current-task > div,
+.drawing-task-row,
+.drawing-detail-header,
+.drawing-error-state,
+.drawing-empty-state,
+.drawing-boundary-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawing-operator-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.drawing-operator-title {
+  min-width: 0;
+}
+
+.drawing-avatar,
+.drawing-empty-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  border-radius: 14px;
+  color: var(--color-primary);
+  background: rgba(22, 119, 255, 0.09);
+}
+
+.drawing-operator-title h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 16px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawing-operator-title small {
+  color: var(--color-subtle);
+  font-size: var(--font-caption);
+  font-weight: 800;
+}
+
+.drawing-current-task {
+  display: grid;
+  gap: 8px;
+}
+
+.drawing-current-task > span,
+.drawing-card-progress-note {
+  color: var(--color-subtle);
+  font-size: var(--font-caption);
+  font-weight: 900;
+}
+
+.drawing-current-task > div {
+  min-width: 0;
+}
+
+.drawing-current-task code,
+.drawing-task-row code,
+.drawing-active-chips code {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(22, 119, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(245, 249, 255, 0.72);
+  padding: 8px 9px;
+  color: #16345d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawing-current-task code,
+.drawing-task-row code {
+  flex: 1 1 auto;
+}
+
+.drawing-current-task p,
+.drawing-task-empty span {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.drawing-copy-button,
+.drawing-card-detail-button,
+.drawing-empty-state button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(164, 190, 220, 0.55);
+  border-radius: var(--radius-control);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(239, 247, 255, 0.76));
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 900;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.drawing-copy-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.drawing-copy-button.copied {
+  color: #16803b;
+  border-color: rgba(34, 197, 94, 0.22);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.drawing-copy-button.error {
+  color: #bf2635;
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.drawing-copy-button:hover:not(:disabled),
+.drawing-card-detail-button:hover,
+.drawing-empty-state button:hover {
+  border-color: rgba(22, 119, 255, 0.24);
+  background: linear-gradient(180deg, #fff, rgba(236, 246, 255, 0.9));
+  box-shadow: 0 10px 20px rgba(22, 80, 140, 0.1);
+  transform: translateY(-1px);
+}
+
+.drawing-copy-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.drawing-operator-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.drawing-operator-metrics span {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(220, 231, 245, 0.76);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 9px 10px;
+}
+
+.drawing-operator-metrics small {
+  color: var(--color-subtle);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.drawing-operator-metrics strong {
+  color: var(--color-ink);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.drawing-card-detail-button {
+  align-self: end;
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.drawing-empty-state,
+.drawing-error-state,
+.drawing-boundary-note,
+.drawing-detail-panel {
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.drawing-empty-state,
+.drawing-error-state,
+.drawing-boundary-note {
+  padding: 18px;
+}
+
+.drawing-empty-state h2 {
+  margin: 0 0 6px;
+  color: var(--color-ink);
+  font-size: var(--font-section-title);
+}
+
+.drawing-empty-state p,
+.drawing-error-state p,
+.drawing-boundary-note span {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.drawing-empty-state button {
+  min-height: 36px;
+  margin-left: auto;
+  padding: 0 12px;
+}
+
+.drawing-error-state {
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.drawing-error-state > svg {
+  flex: 0 0 auto;
+  color: var(--color-danger);
+}
+
+.drawing-error-state strong,
+.drawing-boundary-note strong {
+  color: var(--color-ink);
+  font-size: 13px;
+}
+
+.drawing-error-state .glass-button {
+  margin-left: auto;
+  min-height: 38px;
+}
+
+.drawing-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 84;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 27, 48, 0.22);
+  padding: 24px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.drawing-detail-panel {
+  display: grid;
+  gap: 16px;
+  width: min(620px, 100%);
+  max-height: min(720px, calc(100dvh - 48px));
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 30px 90px rgba(12, 27, 48, 0.22);
+  padding: 20px;
+}
+
+.drawing-detail-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.drawing-detail-header h2 {
+  margin: 8px 0 0;
+  color: var(--color-ink);
+  font-size: var(--font-section-title);
+}
+
+.drawing-task-list {
+  display: grid;
+  gap: 9px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.drawing-task-row {
+  border: 1px solid rgba(22, 119, 255, 0.1);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.48);
+  padding: 8px;
+}
+
+.drawing-task-empty {
+  border: 1px dashed rgba(22, 119, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.44);
+  padding: 16px;
+}
+
+@keyframes drawing-skeleton {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes drawing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .drawing-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .drawing-operator-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 920px) {
+  .drawing-toolbar,
+  .drawing-empty-state,
+  .drawing-error-state,
+  .drawing-boundary-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .drawing-toolbar-actions,
+  .drawing-error-state .glass-button,
+  .drawing-empty-state button {
+    margin-left: 0;
+  }
+
+  .drawing-summary-grid,
+  .drawing-operator-grid,
+  .drawing-loading-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .drawing-summary-card.wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .drawing-operator-head,
+  .drawing-current-task > div,
+  .drawing-detail-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .drawing-operator-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawing-skeleton,
+  .drawing-loading-grid span,
+  .drawing-toolbar-actions .spin,
+  .drawing-detail-panel,
+  .drawing-detail-backdrop {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

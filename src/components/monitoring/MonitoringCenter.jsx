@@ -1,53 +1,11 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Activity, AlertTriangle, Calculator, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
-import { GlassButton, GlassCard, StatusBadge } from "../design-system";
-import { StatusPulse } from "../motion";
-import { CompletionRateChart } from "./CompletionRateChart";
+import { buildMonitoringViewModel } from "../../features/monitoring/monitoring-view.model.js";
 import { LiveLogPanel } from "./LiveLogPanel";
-import { MonitoringMetricCard } from "./MonitoringMetricCard";
-import { TaskStatusChart } from "./TaskStatusChart";
-import {
-  buildMetricCards,
-  buildStatusDistribution,
-  calculateCompletionRate,
-  normalizeLogEntries,
-  normalizeStatusData,
-} from "../../utils/monitoringDataTransform";
-
-const tableOptions = [
-  { key: "board", label: "胶板" },
-  { key: "paint", label: "油漆" },
-];
-
-function MonitoringTableSelector({ value, onChange }) {
-  return (
-    <div className="monitoring-table-selector" role="group" aria-label="查询表">
-      {tableOptions.map((option) => (
-        <button
-          type="button"
-          key={option.key}
-          className={value === option.key ? "active" : ""}
-          onClick={() => onChange(option.key)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DateField({ label, hint, value, onChange }) {
-  return (
-    <label className="monitoring-date-field">
-      <span>
-        <strong>{label}</strong>
-        <small>{hint}</small>
-      </span>
-      <input type="date" value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
+import { MonitoringControls } from "./MonitoringControls.jsx";
+import { MonitoringHero } from "./MonitoringHero.jsx";
+import { MonitoringInsight } from "./MonitoringInsight.jsx";
+import { MonitoringOverview } from "./MonitoringOverview.jsx";
 
 export default function MonitoringCenter({
   configReady,
@@ -65,61 +23,29 @@ export default function MonitoringCenter({
   recalculateDrawingDurations,
   formatDisplayTime,
 }) {
-  const normalized = useMemo(
-    () => normalizeStatusData(statusResult, null),
-    [statusResult],
-  );
-  const selectedTableLabel = targetTable === "paint" ? "油漆表" : "胶板表";
-  const distribution = useMemo(() => buildStatusDistribution(normalized.summary), [normalized.summary]);
-  const completionRate = useMemo(() => calculateCompletionRate(normalized.summary), [normalized.summary]);
-  const metrics = useMemo(
-    () => buildMetricCards(normalized, backgroundSyncStatus).filter((metric) => metric.key !== "lastCheckedAt"),
-    [backgroundSyncStatus, normalized],
-  );
-  const logs = useMemo(
-    () => normalizeLogEntries({
+  const view = useMemo(
+    () =>
+      buildMonitoringViewModel({
+        backgroundSyncStatus,
+        configReady,
+        formatDisplayTime,
+        healthLoading,
+        healthStatus,
+        statusResult,
+        statusState,
+        targetTable,
+      }),
+    [
       backgroundSyncStatus,
+      configReady,
+      formatDisplayTime,
+      healthLoading,
       healthStatus,
       statusResult,
       statusState,
-      formatDisplayTime,
-    }),
-    [backgroundSyncStatus, formatDisplayTime, healthStatus, statusResult, statusState],
+      targetTable,
+    ],
   );
-  const failedHealthChecks = Object.entries(healthStatus?.checks || {})
-    .filter(([, check]) => check?.ok === false);
-  const hasHealthError = Boolean(healthStatus && !healthStatus.ok);
-  const healthErrorText = failedHealthChecks
-    .map(([, check]) => check.message)
-    .filter(Boolean)
-    .join("；") || healthStatus?.label || "飞书连接健康检查未通过";
-  const hasBackgroundError = Boolean(backgroundSyncStatus?.lastError);
-  const healthTone = hasHealthError || hasBackgroundError
-    ? "error"
-    : healthStatus?.ok && backgroundSyncStatus?.lastCheckedAt
-      ? "online"
-      : "standby";
-  const healthLabel = healthLoading && !healthStatus
-    ? "检测中"
-    : hasHealthError || hasBackgroundError
-      ? "异常待处理"
-      : healthStatus?.ok && backgroundSyncStatus?.lastCheckedAt
-        ? "运行正常"
-        : configReady
-          ? "等待检测"
-          : "未知状态";
-  const historicalTimestampAnomalies = Object.values(backgroundSyncStatus?.dailyFull?.summaries || {}).reduce(
-    (total, summary) =>
-      total + Number(summary?.missingClaimTime || 0) + Number(summary?.missingCompleteTime || 0),
-    0,
-  );
-  const hasMonitoringIssue = hasHealthError || hasBackgroundError || historicalTimestampAnomalies > 0;
-  const lastCheckedLabel = backgroundSyncStatus?.lastCheckedAt
-    ? formatDisplayTime(backgroundSyncStatus.lastCheckedAt)
-    : "等待首次检测";
-  const intervalLabel = backgroundSyncStatus?.intervalMs
-    ? `${Math.round(backgroundSyncStatus.intervalMs / 1000)} 秒自动检查`
-    : "自动检查间隔未提供";
 
   return (
     <motion.section
@@ -128,146 +54,51 @@ export default function MonitoringCenter({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
     >
-      <GlassCard className="monitoring-hero">
-        <div className="section-title-block">
-          <span className="section-icon">
-            <Activity size={24} />
-          </span>
-          <div>
-            <h2>机器人运行监控中心</h2>
-            <p>基于真实状态检测接口展示任务分布、完成率、后台检测状态和实时日志。</p>
-          </div>
-        </div>
-        <div className="monitoring-hero-status">
-          <div className="monitoring-runtime-meta">
-            <span><Clock3 size={14} />最近检测 {lastCheckedLabel}</span>
-            <span>{intervalLabel}</span>
-          </div>
-          <StatusPulse
-            tone={statusSyncing ? "running" : healthTone}
-            label={statusSyncing ? "检测中" : healthLabel}
-            detail={backgroundSyncStatus?.running ? "后台检测运行中" : "实时状态"}
-          />
-          <StatusBadge tone={configReady ? "success" : "warning"}>{configReady ? "配置已填写" : "等待配置"}</StatusBadge>
-        </div>
-      </GlassCard>
+      <MonitoringHero
+        backgroundSyncStatus={backgroundSyncStatus}
+        configReady={configReady}
+        healthLabel={view.healthLabel}
+        healthTone={view.healthTone}
+        intervalLabel={view.intervalLabel}
+        lastCheckedLabel={view.lastCheckedLabel}
+        statusSyncing={statusSyncing}
+      />
 
-      <GlassCard className="monitoring-control-surface">
-        <div className="monitoring-filter-grid">
-          <DateField
-            label="开始日期"
-            hint="默认最近7天"
-            value={statusDateRange.startDate}
-            onChange={(startDate) => setStatusDateRange((current) => ({ ...current, startDate }))}
-          />
-          <DateField
-            label="结束日期"
-            hint="默认今天"
-            value={statusDateRange.endDate}
-            onChange={(endDate) => setStatusDateRange((current) => ({ ...current, endDate }))}
-          />
-          <div className="monitoring-table-field">
-            <span>查询表</span>
-            <MonitoringTableSelector value={targetTable} onChange={setTargetTable} />
-          </div>
-        </div>
-        <div className="monitoring-control-actions">
-          {statusState && <div className={`monitoring-inline-result ${statusState.ok ? "ok" : "error"}`}>{statusState.text}</div>}
-          <GlassButton variant="secondary" onClick={recalculateDrawingDurations} disabled={statusSyncing || !configReady}>
-            <Calculator size={17} />
-            {statusSyncing ? "处理中" : "重算用时"}
-          </GlassButton>
-          <GlassButton variant="primary" onClick={() => syncDrawingStatus()} disabled={statusSyncing || !configReady}>
-            <RefreshCw size={17} />
-            {statusSyncing ? "检测中" : "立即检测"}
-          </GlassButton>
-        </div>
-      </GlassCard>
+      <MonitoringControls
+        configReady={configReady}
+        recalculateDrawingDurations={recalculateDrawingDurations}
+        setStatusDateRange={setStatusDateRange}
+        setTargetTable={setTargetTable}
+        statusDateRange={statusDateRange}
+        statusState={statusState}
+        statusSyncing={statusSyncing}
+        syncDrawingStatus={syncDrawingStatus}
+        targetTable={targetTable}
+      />
 
-      <section className="monitoring-metric-grid" aria-label="状态检测指标">
-        {metrics.map((metric, index) => (
-          <motion.div
-            key={metric.key}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.04, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <MonitoringMetricCard metric={metric} loading={statusSyncing && !normalized.hasSummary} formatDisplayTime={formatDisplayTime} />
-          </motion.div>
-        ))}
-      </section>
+      <MonitoringOverview
+        completionRate={view.completionRate}
+        distribution={view.distribution}
+        formatDisplayTime={formatDisplayTime}
+        metrics={view.metrics}
+        normalized={view.normalized}
+        selectedTableLabel={view.selectedTableLabel}
+        statusSyncing={statusSyncing}
+      />
 
-      <section className="monitoring-chart-grid">
-        <GlassCard className="monitoring-chart-card monitoring-distribution-card">
-          <div className="monitoring-panel-head">
-            <div>
-              <h3>任务状态分布</h3>
-              <p>{selectedTableLabel}在当前日期范围内的任务分布。</p>
-            </div>
-            <StatusBadge tone={distribution.available ? "success" : "warning"}>{distribution.available ? "可用" : "暂无数据"}</StatusBadge>
-          </div>
-          <TaskStatusChart distribution={distribution} loading={statusSyncing && !normalized.hasSummary} />
-        </GlassCard>
+      <MonitoringInsight
+        backgroundSyncStatus={backgroundSyncStatus}
+        hasBackgroundError={view.hasBackgroundError}
+        hasHealthError={view.hasHealthError}
+        hasMonitoringIssue={view.hasMonitoringIssue}
+        healthErrorText={view.healthErrorText}
+        historicalTimestampAnomalies={view.historicalTimestampAnomalies}
+      />
 
-        <GlassCard className="monitoring-chart-card monitoring-completion-card">
-          <div className="monitoring-panel-head">
-            <div>
-              <h3>完成率</h3>
-              <p>公式：{selectedTableLabel}已完成数量 / 检测任务总数。</p>
-            </div>
-            <StatusBadge tone={completionRate.available ? "success" : "warning"}>{completionRate.available ? completionRate.label : "暂无数据"}</StatusBadge>
-          </div>
-          <CompletionRateChart completionRate={completionRate} loading={statusSyncing && !normalized.hasSummary} />
-        </GlassCard>
-      </section>
-
-      <section className="monitoring-insight-grid">
-        <GlassCard className={`monitoring-error-panel ${hasMonitoringIssue ? "has-error" : "healthy"}`}>
-          <div className="monitoring-panel-head">
-            <div>
-              <h3>{hasMonitoringIssue ? "异常监控" : "当前运行正常"}</h3>
-              <p>
-                {hasHealthError
-                  ? "检测到飞书凭证、数据表或长连接异常，请及时处理。"
-                  : hasBackgroundError
-                  ? "检测到后台接口返回错误，请及时处理。"
-                  : historicalTimestampAnomalies > 0
-                    ? "历史记录存在缺失时间，凌晨扫描已保留原值，未自动补写。"
-                    : "后台检测链路当前没有异常记录。"}
-              </p>
-            </div>
-            <StatusBadge tone={hasMonitoringIssue ? "warning" : "success"}>
-              {hasMonitoringIssue ? "需要关注" : "运行正常"}
-            </StatusBadge>
-          </div>
-          {hasHealthError ? (
-            <div className="monitoring-error-message">
-              <AlertTriangle size={18} />
-              <span>{healthErrorText}</span>
-            </div>
-          ) : hasBackgroundError ? (
-            <div className="monitoring-error-message">
-              <AlertTriangle size={18} />
-              <span>{backgroundSyncStatus.lastError}</span>
-            </div>
-          ) : historicalTimestampAnomalies > 0 ? (
-            <div className="monitoring-error-message">
-              <AlertTriangle size={18} />
-              <span>发现 {historicalTimestampAnomalies} 项历史时间缺失；状态可纠正，领取/完成时间保持不变。</span>
-            </div>
-          ) : (
-            <div className="monitoring-health-message">
-              <CheckCircle2 size={20} />
-              <div>
-                <strong>暂无异常记录</strong>
-                <span>仅在接口返回真实错误时显示红色告警。</span>
-              </div>
-            </div>
-          )}
-        </GlassCard>
-      </section>
-
-      <LiveLogPanel logs={logs} loading={statusSyncing && logs.length === 0} />
+      <LiveLogPanel
+        logs={view.logs}
+        loading={statusSyncing && view.logs.length === 0}
+      />
     </motion.section>
   );
 }

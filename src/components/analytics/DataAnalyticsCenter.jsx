@@ -1,32 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, Clock3, MapPinned, RefreshCw, Sigma, UsersRound } from "lucide-react";
 import { AnalyticsBarChart } from "./AnalyticsBarChart.jsx";
 import { GlassButton, GlassCard } from "../design-system";
+import { formatAnalyticsMetric } from "../../features/analytics/analytics.model.js";
+import { useAnalyticsController } from "../../features/analytics/useAnalyticsController.js";
 
 const tableOptions = [
   { key: "board", label: "胶板" },
   { key: "paint", label: "油漆" },
 ];
-
-function formatDateInput(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function initialDateRange() {
-  const today = new Date();
-  return {
-    startDate: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
-    endDate: formatDateInput(today),
-  };
-}
-
-function formatMetric(value, suffix = "") {
-  if (value === null || value === undefined) return "暂无数据";
-  return `${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(Number(value))}${suffix}`;
-}
 
 function AnalyticsTableSelector({ value, onChange }) {
   return (
@@ -59,51 +40,15 @@ function SummaryMetric({ icon: Icon, label, value, detail, tone = "blue", primar
 }
 
 export default function DataAnalyticsCenter({ configReady, targetTable, setTargetTable }) {
-  const [dateRange, setDateRange] = useState(initialDateRange);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const loadAnalytics = useCallback(async (signal) => {
-    if (!configReady) return;
-    if (dateRange.startDate && dateRange.endDate && dateRange.startDate > dateRange.endDate) {
-      setError("开始日期不能晚于结束日期");
-      setData(null);
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    try {
-      const searchParams = new URLSearchParams({
-        tableKey: targetTable,
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
-      });
-      const response = await fetch(`/api/drawing-analytics?${searchParams.toString()}`, { signal });
-      const result = await response.json();
-      if (!result.ok) throw new Error(result.error || "数据统计失败");
-      setData(result);
-    } catch (requestError) {
-      if (requestError.name !== "AbortError") {
-        setError(requestError.message || "数据统计失败");
-        setData(null);
-      }
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [configReady, dateRange.endDate, dateRange.startDate, targetTable]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    loadAnalytics(controller.signal);
-    return () => controller.abort();
-  }, [loadAnalytics]);
-
-  const durationItems = useMemo(
-    () => (data?.owners || []).filter((item) => item.averageDuration !== null),
-    [data?.owners],
-  );
+  const {
+    data,
+    dateRange,
+    durationItems,
+    error,
+    loadAnalytics,
+    loading,
+    setDateRange,
+  } = useAnalyticsController({ configReady, targetTable });
   const tableLabel = targetTable === "paint" ? "油漆" : "胶板";
   const summary = data?.summary || {};
 
@@ -142,7 +87,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
         <SummaryMetric
           icon={BarChart3}
           label={`${tableLabel}绘图总数`}
-          value={loading && !data ? "—" : formatMetric(summary.total)}
+          value={loading && !data ? "—" : formatAnalyticsMetric(summary.total)}
           detail={`${dateRange.startDate} 至 ${dateRange.endDate}`}
           tone="blue"
           primary
@@ -150,21 +95,21 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
         <SummaryMetric
           icon={Sigma}
           label="绘图总分值"
-          value={loading && !data ? "—" : formatMetric(summary.totalScore)}
+          value={loading && !data ? "—" : formatAnalyticsMetric(summary.totalScore)}
           detail={`${summary.scoredRecords || 0} 条记录已填写分值`}
           tone="cyan"
         />
         <SummaryMetric
           icon={Clock3}
           label="整体平均用时"
-          value={loading && !data ? "—" : formatMetric(summary.averageDuration, " 分")}
+          value={loading && !data ? "—" : formatAnalyticsMetric(summary.averageDuration, " 分")}
           detail={`${summary.durationRecords || 0} 条记录可计算`}
           tone="orange"
         />
         <SummaryMetric
           icon={UsersRound}
           label="参与绘图人员"
-          value={loading && !data ? "—" : formatMetric(summary.owners)}
+          value={loading && !data ? "—" : formatAnalyticsMetric(summary.owners)}
           detail={`${summary.regions || 0} 个业务区域`}
           tone="green"
         />

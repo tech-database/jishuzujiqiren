@@ -67,7 +67,7 @@ export function edgesToFieldMappings(edges = [], bitableFields = []) {
     const source = parseFieldNodeId(edge.source);
     const target = parseFieldNodeId(edge.target);
     if (source.side !== FIELD_NODE_SIDE.excel || target.side !== FIELD_NODE_SIDE.feishu) continue;
-    if (!next.hasOwnProperty(target.name)) continue;
+    if (!Object.prototype.hasOwnProperty.call(next, target.name)) continue;
     next[target.name] = source.name;
   }
   return next;

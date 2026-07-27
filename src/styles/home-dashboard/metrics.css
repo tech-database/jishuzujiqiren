@@ -1,0 +1,67 @@
+.home-metrics {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.05fr .9fr .9fr 1.12fr 1fr 1fr 1.12fr;
+  gap: 9px;
+}
+
+.home-metric-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  overflow: hidden;
+  border: 1px solid rgba(46,137,250,.38);
+  background: linear-gradient(115deg, rgba(255,255,255,.9), rgba(239,249,255,.66));
+  box-shadow: inset 0 0 14px rgba(78,174,255,.07);
+  clip-path: polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);
+  contain: paint;
+  animation: home-metric-enter .52s cubic-bezier(.22,1,.36,1) both;
+  animation-delay: calc(var(--metric-index, 0) * 65ms + 100ms);
+}
+
+.home-metric-card::after,
+.home-panel::after,
+.home-performance-panel::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  width: 38%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(71, 210, 255, .7), transparent);
+  opacity: .55;
+  transform: translate3d(-135%, 0, 0);
+  animation: home-card-scan 8s linear infinite;
+}
+.home-metric-card::after { animation-delay: calc(var(--metric-index, 0) * -1.12s); }
+
+.home-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 52px;
+  flex: 0 0 46px;
+  color: #0a91ef;
+}
+
+.home-metric-icon svg { width: 38px; height: 38px; }
+.home-metric-copy { display: grid; gap: 7px; }
+.home-metric-copy span,
+.home-split-values span { color: #183d7e; font-size: 14px; font-weight: 750; white-space: nowrap; }
+.home-metric-copy strong { color: #0b286e; font-size: 31px; line-height: 1; }
+.home-split-values { display: grid; gap: 7px; width: 100%; }
+.home-split-values > div { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 7px; }
+.home-split-values > div + div { padding-top: 7px; border-top: 1px solid rgba(65,144,232,.18); }
+.home-split-values strong { color: #078eb7; font-size: 22px; line-height: 1; }
+.home-metric-card.dual .home-metric-icon { width: 34px; flex-basis: 34px; color: #3458f3; }
+.home-metric-card.dual .home-metric-icon svg { width: 31px; height: 31px; }
+.home-metric-card.dual .home-split-values > div:nth-child(2) strong { color: #6040ea; }
+.home-metric-card.green .home-metric-icon,
+.home-metric-card.green .home-split-values strong { color: #079b61; }
+.home-metrics.is-loading .home-metric-card { opacity: .65; }
+

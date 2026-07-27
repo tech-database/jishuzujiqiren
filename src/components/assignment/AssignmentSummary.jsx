@@ -16,7 +16,7 @@ export default function AssignmentSummary({ summary, assignee, submitting, disab
         <div><small>任务状态</small><strong>{submitting ? "提交中" : ready ? "已准备" : "待完善"}</strong></div>
       </div>
       {summary.duplicates.length > 0 && <p className="assignment-duplicate-note">已自动排除 {summary.duplicates.length} 个重复项</p>}
-      <GlassButton className="assignment-summary-submit" type="button" variant="primary" onClick={onSubmit} disabled={disabled}>
+      <GlassButton className="assignment-summary-submit" data-testid="claim-submit" type="button" variant="primary" onClick={onSubmit} disabled={disabled}>
         <Send size={17} />{submitting ? "正在提交" : "提交领取登记"}
       </GlassButton>
       <div className="assignment-submit-state"><ClipboardCheck size={15} /><span>提交后将写入 {summary.uniqueCount} 条唯一料号</span></div>

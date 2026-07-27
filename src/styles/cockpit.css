@@ -490,37 +490,6 @@ select {
   font-size: 11px;
 }
 
-.robot-status-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
-}
-
-.robot-status-metrics > span {
-  min-width: 0;
-  padding: 2px 24px;
-  border-left: 1px solid rgba(86, 126, 197, 0.18);
-  border-radius: 0;
-  background: transparent;
-}
-
-.robot-status-metrics > span:first-child {
-  border-left: 0;
-}
-
-.robot-status-metrics small {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.robot-status-metrics strong {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
-}
-
 .progress-block {
   color: var(--text-primary);
   background: rgba(7, 18, 37, 0.9);
@@ -581,30 +550,6 @@ select {
 .monitoring-hero {
   margin-bottom: 14px;
   border-radius: var(--radius-lg);
-}
-
-h1,
-h2,
-h3,
-h4,
-strong,
-th,
-label {
-  color: var(--text-primary);
-}
-
-p,
-small,
-dt,
-.mapping-muted-text,
-.metric-empty-note,
-.connection-status-copy p,
-.connection-status-meta,
-.drawing-card-progress-note,
-.people-status-note,
-.secure-field-hint,
-.field-flow-node-copy small {
-  color: var(--text-secondary);
 }
 
 .connection-status-meta,
@@ -1015,12 +960,6 @@ button:disabled,
   background: radial-gradient(circle at 50% 44%, rgba(55, 104, 238, 0.22), transparent 38%), rgba(6, 18, 40, 0.92);
 }
 
-.import-hero-meta > span {
-  border-color: rgba(78, 124, 205, 0.24);
-  color: var(--text-secondary);
-  background: rgba(5, 15, 32, 0.68);
-}
-
 .import-dropzone button {
   border: 1px solid rgba(91, 144, 255, 0.68);
   color: #fff;
@@ -1244,10 +1183,6 @@ button:disabled,
 }
 
 @media (max-width: 1200px) {
-  .app-sidebar {
-    flex-basis: 76px;
-    width: 76px;
-  }
 
   .sidebar-brand {
     padding-inline: 5px;
@@ -1283,10 +1218,6 @@ button:disabled,
     padding-bottom: 10px;
     border-right: 0;
     border-bottom: 1px solid rgba(86, 126, 197, 0.18);
-  }
-
-  .robot-status-metrics > span {
-    padding: 12px 14px 2px;
   }
 }
 
@@ -1335,10 +1266,6 @@ button:disabled,
     pointer-events: auto;
   }
 
-  .app-shell {
-    padding: 14px 12px 24px;
-  }
-
   .page-header {
     align-items: flex-start;
     gap: 12px;
@@ -1353,10 +1280,6 @@ button:disabled,
     flex: 0 0 40px;
   }
 
-  .header-main h1 {
-    font-size: 21px;
-  }
-
   .header-main p {
     font-size: 12px;
   }
@@ -1369,19 +1292,11 @@ button:disabled,
     padding: 12px;
   }
 
-  .robot-status-metrics {
-    grid-template-columns: 1fr;
-  }
-
   .robot-status-metrics > span,
   .robot-status-metrics > span:first-child {
     padding: 9px 4px;
     border-top: 1px solid rgba(86, 126, 197, 0.16);
     border-left: 0;
-  }
-
-  .robot-status-metrics > span:first-child {
-    border-top: 0;
   }
 
   .connection-status-grid,

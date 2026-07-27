@@ -1,0 +1,362 @@
+.command-center {
+  display: grid;
+  gap: 18px;
+}
+
+.command-skeleton {
+  min-height: 320px;
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.44)),
+    rgba(255, 255, 255, 0.48);
+  background-size: 240% 100%;
+  animation: command-skeleton 1.4s var(--ease-out) infinite;
+}
+
+.command-hero-icon,
+.robot-command-icon,
+.command-empty-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  border-radius: 14px;
+  color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 10px 24px rgba(22, 119, 255, 0.12);
+}
+
+.command-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.54);
+  box-shadow: var(--shadow-card);
+  padding: 12px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.command-search-field {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 420px;
+  min-height: 44px;
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0 12px;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.command-search-field:focus-within {
+  border-color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-glow);
+}
+
+.command-search-field svg {
+  color: var(--color-primary);
+}
+
+.command-search-field input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-ink);
+}
+
+.command-search-field input::placeholder {
+  color: #64748b;
+}
+
+.command-search-field button,
+.command-dialog-close,
+.command-clear-link {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  color: var(--color-primary);
+  background: transparent;
+}
+
+.command-search-field button,
+.command-dialog-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.command-search-field button:hover,
+.command-dialog-close:hover {
+  background: rgba(22, 119, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.command-toolbar-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.robot-command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.robot-command-card {
+  display: grid;
+  gap: 15px;
+  min-height: 100%;
+  padding: 18px;
+}
+
+.robot-command-card:hover {
+  border-color: rgba(22, 119, 255, 0.3);
+}
+
+.robot-command-card__top,
+.robot-command-actions,
+.command-dialog-header,
+.command-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.robot-command-card h2,
+.command-dialog h2,
+.command-empty-state h2 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-section-title);
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.robot-command-card code,
+.robot-command-example code,
+.command-detail-item code {
+  display: block;
+  width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(22, 119, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(245, 249, 255, 0.72);
+  padding: 10px 12px;
+  color: #16345d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.robot-command-example span,
+.command-detail-item span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-subtle);
+  font-size: var(--font-caption);
+  font-weight: 800;
+}
+
+.robot-command-card p,
+.command-detail-result p,
+.command-empty-state p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-body);
+  line-height: 1.7;
+  text-wrap: pretty;
+}
+
+.robot-command-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.robot-command-actions .glass-button,
+.command-dialog-footer .glass-button {
+  min-height: 38px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+.command-readonly-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 251, 235, 0.56);
+  padding: 13px 15px;
+  color: #704400;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.command-readonly-note strong {
+  flex: 0 0 auto;
+  color: #8a5300;
+  font-size: 13px;
+}
+
+.command-readonly-note span {
+  color: #6f531f;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.command-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.command-clear-link {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+
+.command-clear-link:hover {
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.command-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 27, 48, 0.22);
+  padding: 24px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.command-dialog {
+  display: grid;
+  gap: 18px;
+  width: min(620px, 100%);
+  max-height: min(720px, calc(100dvh - 48px));
+  overflow: auto;
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 30px 90px rgba(12, 27, 48, 0.22);
+  padding: 20px;
+}
+
+.command-dialog-header {
+  align-items: flex-start;
+}
+
+.command-dialog-header > div {
+  display: grid;
+  gap: 9px;
+}
+
+.command-detail-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.command-detail-item {
+  display: grid;
+  gap: 8px;
+}
+
+.command-dialog-footer {
+  align-items: center;
+  border-top: 1px solid rgba(22, 119, 255, 0.1);
+  padding-top: 14px;
+}
+
+.command-dialog-footer p {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 44ch;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.command-dialog-footer svg {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+}
+
+@keyframes command-skeleton {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 1040px) {
+  .command-hero-panel,
+  .command-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .robot-command-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .command-hero-copy,
+  .command-empty-state,
+  .command-dialog-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .command-search-field {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .command-clear-link {
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-skeleton,
+  .robot-command-card,
+  .command-dialog,
+  .command-dialog-backdrop {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
