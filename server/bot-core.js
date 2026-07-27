@@ -1916,24 +1916,35 @@ export async function queryHomeDashboardTable({ startDate, endDate, tableKey } =
     }),
   ]);
   const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
-  const eventTaskRecords = recentEventRecords.filter((record) =>
+  const liveTaskRecords = recentEventRecords.filter((record) =>
     getDrawingMaterialCode(record.fields || {}),
   );
   const summary = { total: taskRecords.length, unclaimed: 0, drawing: 0, done: 0 };
   const events = [];
 
-  for (const record of taskRecords) {
+  for (const record of liveTaskRecords) {
     const fields = record.fields || {};
     const status = detectDrawingStatus(fields);
+    const completeTime = parseBitableDateValue(fields[drawingCompleteTimeField]);
+
+    if (status === drawingStatuses.unclaimed) summary.unclaimed += 1;
+    else if (status === drawingStatuses.drawing) summary.drawing += 1;
+    if (
+      status === drawingStatuses.done &&
+      completeTime &&
+      isBitableDateInRange(completeTime, startDate, endDate)
+    ) {
+      summary.done += 1;
+    }
+  }
+
+  for (const record of taskRecords) {
+    const fields = record.fields || {};
     const owner = bitableValueToText(fields[drawingOwnerField]);
     const materialCode = getDrawingMaterialCode(fields) || "未填料号";
     const claimTime = parseBitableDateValue(fields[drawingClaimTimeField]);
     const completeTime = parseBitableDateValue(fields[drawingCompleteTimeField]);
     const createdTime = parseBitableDateValue(record.created_time);
-
-    if (status === drawingStatuses.unclaimed) summary.unclaimed += 1;
-    else if (status === drawingStatuses.drawing) summary.drawing += 1;
-    else if (status === drawingStatuses.done) summary.done += 1;
 
     if (createdTime) {
       events.push({
@@ -1968,7 +1979,7 @@ export async function queryHomeDashboardTable({ startDate, endDate, tableKey } =
   }
 
   const taskRecordIds = new Set(taskRecords.map((record) => record.record_id));
-  for (const record of eventTaskRecords) {
+  for (const record of liveTaskRecords) {
     if (taskRecordIds.has(record.record_id)) continue;
     const fields = record.fields || {};
     const owner = bitableValueToText(fields[drawingOwnerField]);

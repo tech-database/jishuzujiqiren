@@ -14,7 +14,7 @@ const fields = {
   material: "\u4e0b\u5355\u5efa\u6599\u53f7",
 };
 
-test("home realtime events include today's completion for a previous-day task", async () => {
+test("home realtime status includes cross-day drawing and completion", async () => {
   const originalFetch = globalThis.fetch;
   invalidateAllFeishuCaches();
 
@@ -45,17 +45,37 @@ test("home realtime events include today's completion for a previous-day task", 
     if (requestUrl.includes("/records/search?")) {
       const body = JSON.parse(options.body || "{}");
       const items = body.sort
-        ? [{
-            record_id: "cross-day-task",
-            fields: {
-              [fields.date]: Date.parse("2026-07-24T00:00:00+08:00"),
-              [fields.owner]: "\u6d4b\u8bd5\u4eba\u5458",
-              [fields.status]: "\u5df2\u5b8c\u6210",
-              [fields.claimTime]: Date.parse("2026-07-24T09:00:00+08:00"),
-              [fields.completeTime]: Date.parse("2026-07-25T10:00:00+08:00"),
-              [fields.material]: "TASK-YESTERDAY",
+        ? [
+            {
+              record_id: "cross-day-completed-task",
+              fields: {
+                [fields.date]: Date.parse("2026-07-24T00:00:00+08:00"),
+                [fields.owner]: "\u6d4b\u8bd5\u4eba\u5458",
+                [fields.status]: "\u7ed8\u56fe\u5b8c\u6210",
+                [fields.claimTime]: Date.parse("2026-07-24T09:00:00+08:00"),
+                [fields.completeTime]: Date.parse("2026-07-25T10:00:00+08:00"),
+                [fields.material]: "TASK-YESTERDAY-DONE",
+              },
             },
-          }]
+            {
+              record_id: "cross-day-drawing-task",
+              fields: {
+                [fields.date]: Date.parse("2026-07-24T00:00:00+08:00"),
+                [fields.owner]: "\u6d4b\u8bd5\u4eba\u5458",
+                [fields.status]: "\u7ed8\u56fe\u4e2d",
+                [fields.claimTime]: Date.parse("2026-07-25T08:42:16+08:00"),
+                [fields.material]: "TASK-YESTERDAY-DRAWING",
+              },
+            },
+            {
+              record_id: "today-task",
+              fields: {
+                [fields.date]: Date.parse("2026-07-25T00:00:00+08:00"),
+                [fields.status]: "\u672a\u9886\u53d6",
+                [fields.material]: "TASK-TODAY",
+              },
+            },
+          ]
         : [{
             record_id: "today-task",
             fields: {
@@ -81,15 +101,22 @@ test("home realtime events include today's completion for a previous-day task", 
 
     assert.equal(result.summary.total, 1);
     assert.equal(result.summary.unclaimed, 1);
+    assert.equal(result.summary.drawing, 1);
+    assert.equal(result.summary.done, 1);
     assert.equal(
       result.events.some((event) =>
-        event.id.includes("cross-day-task:complete")),
+        event.id.includes("cross-day-completed-task:complete")),
       true,
     );
     assert.equal(
       result.events.some((event) =>
-        event.id.includes("cross-day-task:claim")),
+        event.id.includes("cross-day-completed-task:claim")),
       false,
+    );
+    assert.equal(
+      result.events.some((event) =>
+        event.id.includes("cross-day-drawing-task:claim")),
+      true,
     );
   } finally {
     globalThis.fetch = originalFetch;

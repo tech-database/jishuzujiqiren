@@ -455,11 +455,14 @@ export default function HomeDashboard() {
   const todaySummary = useMemo(() => {
     const board = data?.today?.board?.summary || {};
     const paint = data?.today?.paint?.summary || {};
+    const unclaimed = Number(board.unclaimed || 0) + Number(paint.unclaimed || 0);
+    const drawing = Number(board.drawing || 0) + Number(paint.drawing || 0);
+    const done = Number(board.done || 0) + Number(paint.done || 0);
     return {
-      total: Number(board.total || 0) + Number(paint.total || 0),
-      unclaimed: Number(board.unclaimed || 0) + Number(paint.unclaimed || 0),
-      drawing: Number(board.drawing || 0) + Number(paint.drawing || 0),
-      done: Number(board.done || 0) + Number(paint.done || 0),
+      total: unclaimed + drawing + done,
+      unclaimed,
+      drawing,
+      done,
     };
   }, [data]);
   const personnel = data?.personnel || {};
