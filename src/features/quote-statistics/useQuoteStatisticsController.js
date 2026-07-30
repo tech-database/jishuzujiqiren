@@ -42,6 +42,26 @@ function newPreviewRow(file) {
   };
 }
 
+export function getUnreadQuoteFiles(files, previewRows) {
+  const previewByKey = new Map(
+    previewRows.map((row) => [row.key, row]),
+  );
+  return files.filter((file) => {
+    const existing = previewByKey.get(getImportFileKey(file));
+    return !existing || existing.status === "preview_error";
+  });
+}
+
+export function mergeQuotePreviewRows(currentRows, queuedRows) {
+  const queuedByKey = new Map(queuedRows.map((row) => [row.key, row]));
+  const merged = currentRows.map((row) => queuedByKey.get(row.key) || row);
+  const currentKeys = new Set(currentRows.map((row) => row.key));
+  return [
+    ...merged,
+    ...queuedRows.filter((row) => !currentKeys.has(row.key)),
+  ];
+}
+
 export function useQuoteStatisticsController() {
   const fileInputRef = useRef(null);
   const [files, setFiles] = useState([]);
@@ -60,6 +80,10 @@ export function useQuoteStatisticsController() {
     () => previewRows.filter((row) => row.status === "written").length,
     [previewRows],
   );
+  const unreadFiles = useMemo(
+    () => getUnreadQuoteFiles(files, previewRows),
+    [files, previewRows],
+  );
 
   function resetPreview() {
     setPreviewRows([]);
@@ -69,21 +93,27 @@ export function useQuoteStatisticsController() {
   function selectFiles(incomingFiles) {
     const incoming = Array.from(incomingFiles || []);
     const { validFiles, errors } = validateImportFiles(incoming);
-    const existingKeys = new Set(files.map(getImportFileKey));
+    const existingKeys = new Set([
+      ...files.map(getImportFileKey),
+      ...previewRows.map((row) => row.key),
+    ]);
     const uniqueFiles = validFiles.filter((file) => !existingKeys.has(getImportFileKey(file)));
+    const duplicateCount = validFiles.length - uniqueFiles.length;
     const availableSlots = Math.max(0, QUOTE_BATCH_FILE_LIMIT - files.length);
     const accepted = uniqueFiles.slice(0, availableSlots);
     const overflowCount = uniqueFiles.length - accepted.length;
 
     if (accepted.length > 0) {
       setFiles((current) => [...current, ...accepted]);
-      setPreviewRows([]);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     const messages = errors.map((error) => `${error.fileName}：${error.message}`);
     if (overflowCount > 0) {
       messages.push(`单次最多处理 ${QUOTE_BATCH_FILE_LIMIT} 份清单，已忽略 ${overflowCount} 份。`);
+    }
+    if (duplicateCount > 0) {
+      messages.push(`已跳过 ${duplicateCount} 份重复或已读取清单。`);
     }
     setFeedback(
       messages.length > 0
@@ -95,13 +125,15 @@ export function useQuoteStatisticsController() {
   }
 
   function removeFile(fileToRemove) {
+    const fileKey = getImportFileKey(fileToRemove);
     setFiles((current) => current.filter((file) => file !== fileToRemove));
-    resetPreview();
+    setPreviewRows((current) => current.filter((row) => row.key !== fileKey));
   }
 
   function clearFiles() {
     setFiles([]);
-    resetPreview();
+    setPreviewRows([]);
+    setFeedback(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -125,9 +157,14 @@ export function useQuoteStatisticsController() {
       return;
     }
 
+    const rows = unreadFiles.map(newPreviewRow);
+    if (rows.length === 0) {
+      setFeedback({ ok: true, text: "当前清单均已读取，没有需要重复处理的文件。" });
+      return;
+    }
+
     setBusy(true);
-    const rows = files.map(newPreviewRow);
-    setPreviewRows(rows);
+    setPreviewRows((current) => mergeQuotePreviewRows(current, rows));
     let successCount = 0;
     let failedCount = 0;
 
@@ -231,6 +268,7 @@ export function useQuoteStatisticsController() {
     setDragging,
     updateQuoteOfficer,
     updateQuoteDate,
+    unreadCount: unreadFiles.length,
     writtenCount,
   };
 }

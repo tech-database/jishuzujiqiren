@@ -21,7 +21,6 @@ import { createQuoteStatisticEntry } from "./quote-statistics.api.js";
 import {
   QUOTE_BATCH_FILE_LIMIT,
   quoteOfficerOptions,
-  useQuoteStatisticsController,
 } from "./useQuoteStatisticsController.js";
 
 const summaryColumns = ["报价日期", "类别", "报价员", "区域", "业务", "单价", "总价"];
@@ -62,8 +61,8 @@ const initialManualEntry = {
   unitPrice: "",
 };
 
-export default function QuoteStatisticsPage({ quoteTableReady }) {
-  const c = useQuoteStatisticsController();
+export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
+  const c = controller;
   const [manualEntry, setManualEntry] = useState(initialManualEntry);
   const [manualBusy, setManualBusy] = useState(false);
   const [manualFeedback, setManualFeedback] = useState(null);
@@ -208,14 +207,20 @@ export default function QuoteStatisticsPage({ quoteTableReady }) {
 
             <div className="quote-analyze-action">
               <div>
-                <strong>{c.files.length > 0 ? `待统计 ${c.files.length} 份清单` : "尚未选择清单"}</strong>
+                <strong>
+                  {c.unreadCount > 0
+                    ? `待统计 ${c.unreadCount} 份新清单`
+                    : c.previewRows.length > 0
+                      ? "当前清单均已读取"
+                      : "尚未选择清单"}
+                </strong>
                 <span>逐份汇总销售单价，并按数量 × 销售单价计算总价</span>
               </div>
               <GlassButton
                 type="button"
                 variant="primary"
                 onClick={c.previewFiles}
-                disabled={c.busy || c.files.length === 0 || !c.quoteOfficer}
+                disabled={c.busy || c.unreadCount === 0 || !c.quoteOfficer}
               >
                 {c.busy ? <LoaderCircle className="quote-spin" size={17} /> : <FileSearch size={17} />}
                 批量读取并统计

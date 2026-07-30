@@ -7,6 +7,7 @@ import { useConfigController } from "./features/config/useConfigController.js";
 import { useDrawingController } from "./features/drawing/useDrawingController.js";
 import { useImportController } from "./features/import-data/useImportController.js";
 import { useMonitoringController } from "./features/monitoring/useMonitoringController.js";
+import { useQuoteStatisticsController } from "./features/quote-statistics/useQuoteStatisticsController.js";
 import { AppPages } from "./app/AppPages.jsx";
 import { AppFrame } from "./app/AppFrame.jsx";
 import { AdminDialogs } from "./app/AdminDialogs.jsx";
@@ -38,6 +39,7 @@ function App() {
   const configReady = configController.configReady;
   const importController = useImportController(targetTable);
   const drawingController = useDrawingController(targetTable);
+  const quoteStatisticsController = useQuoteStatisticsController();
   const monitoringController = useMonitoringController({
     activeTab: sessionController.activeTab,
     configReady,
@@ -50,6 +52,7 @@ function App() {
     drawing: drawingController,
     importData: importController,
     monitoring: monitoringController,
+    quoteStatistics: quoteStatisticsController,
     shared: { setTargetTable, targetTable },
   };
 
