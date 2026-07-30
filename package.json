@@ -19,6 +19,8 @@
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "verify": "npm test && npm run lint && npm run check:architecture && npm run check:source-unused && npm run check:css && npm run check:css-unused && npm run build && npm run check:bundle",
     "verify:full": "npm run verify && npm run test:e2e",
+    "pregit:publish": "npm run verify",
+    "git:publish": "node scripts/publish-git.mjs",
     "server": "node server/index.js",
     "feishu:ws": "node server/long-connection.js",
     "start": "node server/index.js",

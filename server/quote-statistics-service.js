@@ -10,6 +10,14 @@ export const quoteOfficerCategories = Object.freeze({
 const manualEntryTypes = new Set(["报价", "下单"]);
 const manualEntryCategories = new Set(["胶板", "油漆", "软体"]);
 
+export function normalizeQuoteStatisticEntryType(value = "报价") {
+  const type = String(value || "").trim();
+  if (!manualEntryTypes.has(type)) {
+    throw new Error("请选择有效的上传类型：报价或下单");
+  }
+  return type;
+}
+
 export function normalizeManualQuoteEntry(input = {}) {
   const type = String(input.type || "").trim();
   const category = String(input.category || "").trim();
@@ -163,6 +171,7 @@ function validatePricedRecords(records) {
 }
 
 export function summarizeQuoteRecords(records, {
+  entryType = "报价",
   quoteOfficer,
   quoteDate,
   now = new Date(),
@@ -171,6 +180,7 @@ export function summarizeQuoteRecords(records, {
     throw new Error("清单中没有可统计的数据行");
   }
   const officer = String(quoteOfficer || "").trim();
+  const type = normalizeQuoteStatisticEntryType(entryType);
   const category = quoteOfficerCategories[officer];
   if (!category) throw new Error("请选择有效的报价员");
   const resolvedQuoteDate = String(quoteDate || shanghaiDateString(now)).trim();
@@ -197,6 +207,7 @@ export function summarizeQuoteRecords(records, {
 
   return {
     summary: {
+      类型: type,
       报价日期: resolvedQuoteDate,
       类别: category,
       报价员: officer,

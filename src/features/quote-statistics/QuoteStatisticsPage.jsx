@@ -23,7 +23,7 @@ import {
   quoteOfficerOptions,
 } from "./useQuoteStatisticsController.js";
 
-const summaryColumns = ["报价日期", "类别", "报价员", "区域", "业务", "单价", "总价"];
+const summaryColumns = ["类型", "报价日期", "类别", "报价员", "区域", "业务", "单价", "总价"];
 
 const statusLabels = Object.freeze({
   pending: "等待读取",
@@ -113,7 +113,7 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
             <div className="quote-heading-icon"><BadgeDollarSign size={22} /></div>
             <div>
               <h1>报价统计</h1>
-              <p>一次可上传最多 {QUOTE_BATCH_FILE_LIMIT} 份报价清单，按数量与销售单价自动计算总价。</p>
+              <p>一次可上传最多 {QUOTE_BATCH_FILE_LIMIT} 份报价或下单清单，按数量与销售单价自动计算总价。</p>
             </div>
           </header>
 
@@ -157,12 +157,37 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
           </section>
 
           <section className="quote-upload-section" aria-labelledby="quote-upload-title">
-            <div className="quote-section-title">
-              <span className="quote-step-number">2</span>
-              <div>
-                <h2 id="quote-upload-title">批量上传报价清单</h2>
-                <p>支持多选或拖入文件，单次最多 {QUOTE_BATCH_FILE_LIMIT} 份。</p>
+            <div className="quote-upload-header">
+              <div className="quote-section-title">
+                <span className="quote-step-number">2</span>
+                <div>
+                  <h2 id="quote-upload-title">批量上传数据清单</h2>
+                  <p>先选择本批清单类型，再上传文件；单次最多 {QUOTE_BATCH_FILE_LIMIT} 份。</p>
+                </div>
               </div>
+              <fieldset className="quote-upload-type">
+                <legend>本批清单类型</legend>
+                <button
+                  className={c.uploadType === "报价" ? "active" : ""}
+                  type="button"
+                  aria-pressed={c.uploadType === "报价"}
+                  onClick={() => c.updateUploadType("报价")}
+                  disabled={c.busy}
+                >
+                  <BadgeDollarSign size={16} />
+                  报价清单
+                </button>
+                <button
+                  className={c.uploadType === "下单" ? "active" : ""}
+                  type="button"
+                  aria-pressed={c.uploadType === "下单"}
+                  onClick={() => c.updateUploadType("下单")}
+                  disabled={c.busy}
+                >
+                  <ShoppingCart size={16} />
+                  下单清单
+                </button>
+              </fieldset>
             </div>
             <FileDropZone
               fileInputRef={c.fileInputRef}
@@ -177,8 +202,11 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
               <section className="quote-file-queue" aria-label={`已选择 ${c.files.length} 份清单`}>
                 <div className="quote-file-queue-heading">
                   <div>
-                    <strong>已选择 {c.files.length} 份清单</strong>
-                    <span>还可添加 {QUOTE_BATCH_FILE_LIMIT - c.files.length} 份</span>
+                    <strong>清单列表 {c.files.length} 份</strong>
+                    <span>
+                      待读取 {c.unreadCount} 份 · 已读取 {c.readCount} 份 ·
+                      还可添加 {QUOTE_BATCH_FILE_LIMIT - c.files.length} 份
+                    </span>
                   </div>
                   <button type="button" onClick={c.clearFiles} disabled={c.busy}>
                     <Trash2 size={15} />
@@ -186,16 +214,17 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
                   </button>
                 </div>
                 <div className="quote-file-queue-list">
-                  {c.files.map((file) => (
-                    <div className="quote-file-queue-item" key={`${file.name}:${file.size}:${file.lastModified}`}>
+                  {c.fileQueue.map((item) => (
+                    <div className="quote-file-queue-item" key={item.key}>
                       <FileSpreadsheet size={16} />
-                      <span title={file.name}>{file.name}</span>
-                      <small>{formatFileSize(file.size)}</small>
+                      <span title={item.file.name}>{item.file.name}</span>
+                      <small className={`quote-file-state ${item.tone}`}>{item.label}</small>
+                      <small className="quote-file-size">{formatFileSize(item.file.size)}</small>
                       <button
                         type="button"
-                        onClick={() => c.removeFile(file)}
+                        onClick={() => c.removeFile(item.file)}
                         disabled={c.busy}
-                        aria-label={`移除 ${file.name}`}
+                        aria-label={`移除 ${item.file.name}`}
                       >
                         <X size={15} />
                       </button>
@@ -209,12 +238,12 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
               <div>
                 <strong>
                   {c.unreadCount > 0
-                    ? `待统计 ${c.unreadCount} 份新清单`
+                    ? `待统计 ${c.unreadCount} 份${c.uploadType}清单`
                     : c.previewRows.length > 0
                       ? "当前清单均已读取"
                       : "尚未选择清单"}
                 </strong>
-                <span>逐份汇总销售单价，并按数量 × 销售单价计算总价</span>
+                <span>读取后将以“{c.uploadType}”类型写入报价数据统计表</span>
               </div>
               <GlassButton
                 type="button"
@@ -223,7 +252,7 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
                 disabled={c.busy || c.unreadCount === 0 || !c.quoteOfficer}
               >
                 {c.busy ? <LoaderCircle className="quote-spin" size={17} /> : <FileSearch size={17} />}
-                批量读取并统计
+                读取{c.uploadType}清单并统计
               </GlassButton>
             </div>
           </section>

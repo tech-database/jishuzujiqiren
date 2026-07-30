@@ -9,6 +9,7 @@ import {
 } from "./quote-statistics.api.js";
 
 export const QUOTE_BATCH_FILE_LIMIT = 50;
+export const quoteUploadTypes = Object.freeze(["报价", "下单"]);
 
 function localDate() {
   const now = new Date();
@@ -62,11 +63,43 @@ export function mergeQuotePreviewRows(currentRows, queuedRows) {
   ];
 }
 
+function quoteFileQueueState(row) {
+  if (!row || row.status === "pending") {
+    return { label: "待读取", tone: "pending", isRead: false };
+  }
+  if (row.status === "reading") {
+    return { label: "读取中", tone: "working", isRead: false };
+  }
+  if (row.status === "preview_error") {
+    return { label: "读取失败", tone: "error", isRead: false };
+  }
+  if (row.status === "writing") {
+    return { label: "写入中", tone: "working", isRead: true };
+  }
+  if (row.status === "written") {
+    return { label: "已写入", tone: "written", isRead: true };
+  }
+  if (row.status === "write_error") {
+    return { label: "写入失败", tone: "error", isRead: true };
+  }
+  return { label: "已读取", tone: "read", isRead: true };
+}
+
+export function buildQuoteFileQueue(files, previewRows) {
+  const previewByKey = new Map(previewRows.map((row) => [row.key, row]));
+  return files.map((file) => ({
+    file,
+    key: getImportFileKey(file),
+    ...quoteFileQueueState(previewByKey.get(getImportFileKey(file))),
+  }));
+}
+
 export function useQuoteStatisticsController() {
   const fileInputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [quoteOfficer, setQuoteOfficer] = useState("");
   const [quoteDate, setQuoteDate] = useState(localDate);
+  const [uploadType, setUploadType] = useState("报价");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
@@ -83,6 +116,14 @@ export function useQuoteStatisticsController() {
   const unreadFiles = useMemo(
     () => getUnreadQuoteFiles(files, previewRows),
     [files, previewRows],
+  );
+  const fileQueue = useMemo(
+    () => buildQuoteFileQueue(files, previewRows),
+    [files, previewRows],
+  );
+  const readCount = useMemo(
+    () => fileQueue.filter((item) => item.isRead).length,
+    [fileQueue],
   );
 
   function resetPreview() {
@@ -119,7 +160,10 @@ export function useQuoteStatisticsController() {
       messages.length > 0
         ? { ok: false, text: messages.join("；") }
         : accepted.length > 0
-          ? { ok: null, text: `已选择 ${files.length + accepted.length} 份清单。` }
+          ? {
+              ok: null,
+              text: `本次新增 ${accepted.length} 份清单，仅会读取新增文件；已读取结果继续保留。`,
+            }
           : feedback,
     );
   }
@@ -147,9 +191,15 @@ export function useQuoteStatisticsController() {
     resetPreview();
   }
 
+  function updateUploadType(value) {
+    if (!quoteUploadTypes.includes(value)) return;
+    setUploadType(value);
+    resetPreview();
+  }
+
   async function previewFiles() {
     if (files.length === 0) {
-      setFeedback({ ok: false, text: "请先选择报价清单。" });
+      setFeedback({ ok: false, text: `请先选择${uploadType}清单。` });
       return;
     }
     if (!quoteOfficer) {
@@ -177,7 +227,12 @@ export function useQuoteStatisticsController() {
       setPreviewRows((current) =>
         current.map((item) => item.key === row.key ? { ...item, status: "reading" } : item));
       try {
-        const data = await previewQuoteStatistics(row.file, quoteOfficer, quoteDate);
+        const data = await previewQuoteStatistics(
+          row.file,
+          quoteOfficer,
+          quoteDate,
+          uploadType,
+        );
         successCount += 1;
         setPreviewRows((current) =>
           current.map((item) => item.key === row.key
@@ -228,7 +283,12 @@ export function useQuoteStatisticsController() {
       setPreviewRows((current) =>
         current.map((item) => item.key === row.key ? { ...item, status: "writing", error: "" } : item));
       try {
-        const result = await commitQuoteStatistics(row.file, quoteOfficer, quoteDate);
+        const result = await commitQuoteStatistics(
+          row.file,
+          quoteOfficer,
+          quoteDate,
+          uploadType,
+        );
         assertSingleQuoteWrite(result);
         successCount += 1;
         setPreviewRows((current) =>
@@ -244,7 +304,7 @@ export function useQuoteStatisticsController() {
     setFeedback({
       ok: failedCount === 0,
       text: failedCount === 0
-        ? `已成功写入 ${successCount} 条报价统计记录。`
+        ? `已成功写入 ${successCount} 条${uploadType}统计记录。`
         : `写入完成：成功 ${successCount} 条，失败 ${failedCount} 条，可重试失败项。`,
     });
     setBusy(false);
@@ -257,17 +317,21 @@ export function useQuoteStatisticsController() {
     dragging,
     feedback,
     fileInputRef,
+    fileQueue,
     files,
     previewFiles,
     previewRows,
     quoteOfficer,
     quoteDate,
+    readCount,
+    uploadType,
     readyCount,
     removeFile,
     selectFiles,
     setDragging,
     updateQuoteOfficer,
     updateQuoteDate,
+    updateUploadType,
     unreadCount: unreadFiles.length,
     writtenCount,
   };

@@ -392,6 +392,47 @@
   font-weight: 800;
 }
 
+.quote-sort-button {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.quote-sort-button svg {
+  flex: 0 0 auto;
+  color: #91a2b8;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.quote-sort-button:hover,
+.quote-sort-button:focus-visible,
+.quote-sort-button.is-active {
+  color: #075fc8;
+}
+
+.quote-sort-button:hover svg,
+.quote-sort-button:focus-visible svg,
+.quote-sort-button.is-active svg {
+  color: #0875dd;
+  transform: translateY(1px);
+}
+
+.quote-sort-button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid rgba(34, 132, 235, 0.38);
+  outline-offset: 3px;
+}
+
 .quote-report-table th:first-child,
 .quote-report-table td:first-child,
 .quote-business-table th:nth-child(2),
@@ -1205,7 +1246,7 @@
 
 .quote-home-active .quote-report-table,
 .quote-home-active .quote-region-table {
-  height: 100%;
+  height: auto;
 }
 
 .quote-home-active .quote-officer-cards {
@@ -1266,8 +1307,9 @@
 
 .quote-home-active .quote-report-table th,
 .quote-home-active .quote-report-table td {
+  height: 43px;
   border-bottom-color: rgba(51, 120, 202, 0.12);
-  padding-block: 11px;
+  padding-block: 7px;
 }
 
 .quote-home-active .quote-report-table th {

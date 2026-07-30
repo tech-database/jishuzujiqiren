@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
+  ArrowDownWideNarrow,
   ChartNoAxesColumnIncreasing,
   CircleDollarSign,
   ClipboardList,
@@ -266,6 +267,44 @@ function OfficerOverview({
 }
 
 function RegionComparison({ items, selectedMonth, onMonthChange, loading }) {
+  const [sortKey, setSortKey] = useState("quoteTotal");
+  const sortedItems = useMemo(() => (
+    items
+      .map((item, index) => ({
+        item,
+        index,
+        conversionRate: item.quoteTotal > 0
+          ? (item.orderTotal / item.quoteTotal) * 100
+          : null,
+      }))
+      .sort((left, right) => {
+        const leftValue = sortKey === "conversionRate"
+          ? left.conversionRate
+          : Number(left.item[sortKey] || 0);
+        const rightValue = sortKey === "conversionRate"
+          ? right.conversionRate
+          : Number(right.item[sortKey] || 0);
+        if (leftValue === null && rightValue === null) return left.index - right.index;
+        if (leftValue === null) return 1;
+        if (rightValue === null) return -1;
+        return rightValue - leftValue || left.index - right.index;
+      })
+      .map(({ item }) => item)
+  ), [items, sortKey]);
+
+  const sortButton = (key, label) => (
+    <button
+      className={`quote-sort-button ${sortKey === key ? "is-active" : ""}`.trim()}
+      type="button"
+      aria-label={`${label}从高到低排序`}
+      title={`按${label}从高到低排序`}
+      onClick={() => setSortKey(key)}
+    >
+      <span>{label}</span>
+      <ArrowDownWideNarrow size={13} aria-hidden="true" />
+    </button>
+  );
+
   return (
     <section
       className={`quote-report-panel quote-region-panel ${loading ? "is-loading" : ""}`.trim()}
@@ -295,13 +334,19 @@ function RegionComparison({ items, selectedMonth, onMonthChange, loading }) {
               <thead>
                 <tr>
                   <th>区域</th>
-                  <th>报价金额</th>
-                  <th>下单金额</th>
-                  <th>下单率</th>
+                  <th aria-sort={sortKey === "quoteTotal" ? "descending" : "none"}>
+                    {sortButton("quoteTotal", "报价金额")}
+                  </th>
+                  <th aria-sort={sortKey === "orderTotal" ? "descending" : "none"}>
+                    {sortButton("orderTotal", "下单金额")}
+                  </th>
+                  <th aria-sort={sortKey === "conversionRate" ? "descending" : "none"}>
+                    {sortButton("conversionRate", "下单率")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
+                {sortedItems.map((item) => {
                   const rate = item.quoteTotal > 0
                     ? (item.orderTotal / item.quoteTotal) * 100
                     : null;
@@ -335,6 +380,31 @@ function RegionComparison({ items, selectedMonth, onMonthChange, loading }) {
 }
 
 function BusinessRanking({ items, selectedMonth, onMonthChange, loading }) {
+  const [sortKey, setSortKey] = useState("quoteTotal");
+  const sortedItems = useMemo(() => (
+    items
+      .map((item, index) => ({ item, index }))
+      .sort((left, right) => {
+        const leftValue = Number(left.item[sortKey] ?? -Infinity);
+        const rightValue = Number(right.item[sortKey] ?? -Infinity);
+        return rightValue - leftValue || left.index - right.index;
+      })
+      .map(({ item }) => item)
+  ), [items, sortKey]);
+
+  const sortButton = (key, label) => (
+    <button
+      className={`quote-sort-button ${sortKey === key ? "is-active" : ""}`.trim()}
+      type="button"
+      aria-label={`${label}从高到低排序`}
+      title={`按${label}从高到低排序`}
+      onClick={() => setSortKey(key)}
+    >
+      <span>{label}</span>
+      <ArrowDownWideNarrow size={13} aria-hidden="true" />
+    </button>
+  );
+
   return (
     <section
       className={`quote-report-panel quote-business-panel ${loading ? "is-loading" : ""}`.trim()}
@@ -364,14 +434,22 @@ function BusinessRanking({ items, selectedMonth, onMonthChange, loading }) {
               <tr>
                 <th>排名</th>
                 <th>业务员</th>
-                <th>报价份数</th>
-                <th>报价总额（万）</th>
-                <th>下单金额（万）</th>
-                <th>下单率</th>
+                <th aria-sort={sortKey === "quoteCount" ? "descending" : "none"}>
+                  {sortButton("quoteCount", "报价份数")}
+                </th>
+                <th aria-sort={sortKey === "quoteTotal" ? "descending" : "none"}>
+                  {sortButton("quoteTotal", "报价总额（万）")}
+                </th>
+                <th aria-sort={sortKey === "orderTotal" ? "descending" : "none"}>
+                  {sortButton("orderTotal", "下单金额（万）")}
+                </th>
+                <th aria-sort={sortKey === "conversionRate" ? "descending" : "none"}>
+                  {sortButton("conversionRate", "下单率")}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item, index) => (
+              {sortedItems.map((item, index) => (
                 <tr key={item.name}>
                   <td><span className={`quote-rank ${rankClass(index)}`}>{index + 1}</span></td>
                   <td><strong>{item.name}</strong></td>

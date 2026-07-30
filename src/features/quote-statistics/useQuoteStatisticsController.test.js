@@ -2,9 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertSingleQuoteWrite,
+  buildQuoteFileQueue,
   getUnreadQuoteFiles,
   mergeQuotePreviewRows,
 } from "./useQuoteStatisticsController.js";
+
+test("marks an existing preview as read and only the newly added file as pending", () => {
+  const files = [
+    { name: "already.xlsx", size: 10, lastModified: 1 },
+    { name: "new.xlsx", size: 20, lastModified: 2 },
+  ];
+  const previewRows = [
+    { key: "already.xlsx:10:1", status: "ready" },
+  ];
+
+  assert.deepEqual(
+    buildQuoteFileQueue(files, previewRows).map(({ label, isRead }) => ({ label, isRead })),
+    [
+      { label: "已读取", isRead: true },
+      { label: "待读取", isRead: false },
+    ],
+  );
+  assert.deepEqual(
+    getUnreadQuoteFiles(files, previewRows).map((file) => file.name),
+    ["new.xlsx"],
+  );
+});
 
 test("accepts only an explicit one-record quote write result", () => {
   assert.doesNotThrow(() => assertSingleQuoteWrite({ count: 1 }));

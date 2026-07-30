@@ -179,6 +179,72 @@
   padding: 16px;
 }
 
+.quote-upload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.quote-upload-type {
+  display: flex;
+  flex: 0 0 310px;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid rgba(93, 126, 174, 0.2);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.quote-upload-type legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.quote-upload-type button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--color-muted);
+  background: transparent;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.quote-upload-type button:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: rgba(22, 119, 255, 0.06);
+}
+
+.quote-upload-type button.active {
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.quote-upload-type button:focus-visible {
+  outline: 3px solid rgba(22, 119, 255, 0.2);
+  outline-offset: 1px;
+}
+
+.quote-upload-type button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
 .quote-data-entry-card {
   display: grid;
   gap: 14px;
@@ -429,7 +495,7 @@
 
 .quote-file-queue-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 9px;
   min-height: 36px;
@@ -454,6 +520,41 @@
   color: var(--color-subtle);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.quote-file-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.quote-file-state.pending {
+  color: #475569;
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.quote-file-state.working {
+  color: #175cd3;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.quote-file-state.read {
+  color: #075fc8;
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.quote-file-state.written {
+  color: #067647;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.quote-file-state.error {
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .quote-file-queue-item button {
@@ -735,14 +836,22 @@
   }
 
   .quote-page-heading,
+  .quote-upload-header,
   .quote-analyze-action,
   .quote-preview-heading {
     align-items: flex-start;
   }
 
+  .quote-upload-header,
   .quote-analyze-action,
   .quote-preview-heading {
     flex-direction: column;
+  }
+
+  .quote-upload-type {
+    width: 100%;
+    flex-basis: auto;
+    box-sizing: border-box;
   }
 
   .quote-rules-panel {

@@ -39,6 +39,7 @@ function createHarness(registerRoutes) {
 test("quote preview parses but does not write, while commit writes one quote record", async () => {
   let writeCalls = 0;
   const summary = {
+    类型: "下单",
     报价日期: "2026-07-28",
     类别: "软体",
     报价员: "胡燕琪",
@@ -52,6 +53,7 @@ test("quote preview parses but does not write, while commit writes one quote rec
       services: {
         parseSpreadsheetBuffer: async () => [{ 销售单价: 100, 销售总价: 300 }],
         summarizeQuoteRecords: (_records, options) => {
+          assert.equal(options.entryType, "下单");
           assert.equal(options.quoteOfficer, "胡燕琪");
           assert.equal(options.quoteDate, "2026-07-28");
           return { summary, sourceRowCount: 1 };
@@ -69,6 +71,7 @@ test("quote preview parses but does not write, while commit writes one quote rec
 
   const query = {
     fileName: "报价.xlsx",
+    entryType: "下单",
     quoteOfficer: "胡燕琪",
     quoteDate: "2026-07-28",
   };

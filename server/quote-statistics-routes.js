@@ -8,6 +8,7 @@ import {
 import { apiErrorCodes, sendError, successResponse } from "./api-response.js";
 
 export const quoteStatisticsFields = Object.freeze([
+  "类型",
   "报价日期",
   "类别",
   "报价员",
@@ -51,6 +52,7 @@ export function createQuoteStatisticsRoutes({ services = {} } = {}) {
     const fileName = assertSpreadsheetRequest(req);
     const records = await parseSpreadsheet(req.body, { fileName });
     const result = summarizeRecords(records, {
+      entryType: req.query.entryType,
       quoteOfficer: req.query.quoteOfficer,
       quoteDate: req.query.quoteDate,
     });

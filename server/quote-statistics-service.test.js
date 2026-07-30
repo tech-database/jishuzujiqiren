@@ -2,9 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeManualQuoteEntry,
+  normalizeQuoteStatisticEntryType,
   quoteOfficerCategories,
   summarizeQuoteRecords,
 } from "./quote-statistics-service.js";
+
+test("accepts only quote or order as the uploaded sheet type", () => {
+  assert.equal(normalizeQuoteStatisticEntryType("报价"), "报价");
+  assert.equal(normalizeQuoteStatisticEntryType("下单"), "下单");
+  assert.equal(normalizeQuoteStatisticEntryType(), "报价");
+  assert.throws(
+    () => normalizeQuoteStatisticEntryType("其他"),
+    /报价或下单/,
+  );
+});
 
 test("normalizes manual quote and order entries for the shared statistics table", () => {
   assert.deepEqual(
@@ -70,6 +81,7 @@ test("summarizes one quote sheet into one table record", () => {
 
   assert.deepEqual(result, {
     summary: {
+      类型: "报价",
       报价日期: "2026-07-27",
       类别: "胶板",
       报价员: "杨利伟",
@@ -103,6 +115,19 @@ test("ignores product rows that do not have a sales unit price", () => {
   assert.equal(result.ignoredUnpricedRowCount, 1);
   assert.equal(result.summary.单价, 15839.79);
   assert.equal(result.summary.总价, 122469.34);
+});
+
+test("writes the selected uploaded sheet type into the summarized record", () => {
+  const result = summarizeQuoteRecords(
+    [{ 区域: "华北区", 业务: "张三", 数量: 2, 销售单价: 100 }],
+    {
+      entryType: "下单",
+      quoteOfficer: "杨利伟",
+      quoteDate: "2026-07-30",
+    },
+  );
+
+  assert.equal(result.summary.类型, "下单");
 });
 
 test("skips a priced row with invalid quantity instead of rejecting the whole sheet", () => {
