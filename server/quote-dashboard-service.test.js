@@ -163,6 +163,9 @@ test("defaults the dashboard query range to today and rejects a reversed range",
     label: "2026-07-29",
   });
   assert.deepEqual(result.summary, { fileCount: 1, unitPrice: 100, total: 1000 });
+  const quoteCall = listCalls.find((call) => call.key === "quote");
+  assert.equal(quoteCall.options.startDate, undefined);
+  assert.equal(quoteCall.options.endDate, undefined);
   assert.equal(listCalls.find((call) => call.key === "board").options.startDate, "2026-07-29");
   await assert.rejects(
     queryQuoteDashboard(

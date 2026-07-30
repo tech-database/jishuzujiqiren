@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import { PageTransition } from "../../components/motion/index.js";
 import { CountUpNumber } from "../../components/home/CountUpNumber.jsx";
-import { getQuoteDashboard } from "./quote-dashboard.api.js";
+import {
+  getInitialQuoteDashboard,
+  getQuoteDashboard,
+} from "./quote-dashboard.api.js";
 
 const dashboardScopes = [
   { key: "all", label: "全部", description: "胶板、油漆与软体合并" },
@@ -184,7 +187,10 @@ function OfficerOverview({
   );
 
   return (
-    <section className="quote-report-panel quote-officer-panel">
+    <section
+      className={`quote-report-panel quote-officer-panel ${loading ? "is-loading" : ""}`.trim()}
+      aria-busy={loading}
+    >
       <SectionHeading
         icon={UsersRound}
         title="报价员概览"
@@ -261,7 +267,10 @@ function OfficerOverview({
 
 function RegionComparison({ items, selectedMonth, onMonthChange, loading }) {
   return (
-    <section className="quote-report-panel quote-region-panel">
+    <section
+      className={`quote-report-panel quote-region-panel ${loading ? "is-loading" : ""}`.trim()}
+      aria-busy={loading}
+    >
       <SectionHeading
         icon={ChartNoAxesColumnIncreasing}
         title="区域报价与下单对比"
@@ -327,7 +336,10 @@ function RegionComparison({ items, selectedMonth, onMonthChange, loading }) {
 
 function BusinessRanking({ items, selectedMonth, onMonthChange, loading }) {
   return (
-    <section className="quote-report-panel quote-business-panel">
+    <section
+      className={`quote-report-panel quote-business-panel ${loading ? "is-loading" : ""}`.trim()}
+      aria-busy={loading}
+    >
       <SectionHeading
         icon={UsersRound}
         title="业务员报价排名"
@@ -399,9 +411,9 @@ export default function QuoteDashboardPage() {
   const [loadingSections, setLoadingSections] = useState({
     today: true,
     month: true,
-    officer: true,
-    region: true,
-    business: true,
+    officer: false,
+    region: false,
+    business: false,
   });
   const [error, setError] = useState("");
   const [scope, setScope] = useState("all");
@@ -422,29 +434,50 @@ export default function QuoteDashboardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    loadSection(
-      "today",
-      { startDate: today, endDate: today },
-      setTodayData,
-      controller.signal,
-    );
-    return () => controller.abort();
-  }, [loadSection, today]);
+  const loadInitialDashboard = useCallback(async (signal) => {
+    setLoadingSections((current) => ({
+      ...current,
+      today: true,
+      month: true,
+    }));
+    setError("");
+    try {
+      const monthRange = monthDateRange(currentMonth);
+      const result = await getInitialQuoteDashboard({
+        signal,
+        today,
+        monthStartDate: monthRange.startDate,
+        monthEndDate: monthRange.endDate,
+      });
+      setTodayData(result.today);
+      setMonthData(result.month);
+    } catch (requestError) {
+      if (requestError?.name !== "AbortError") {
+        setError(requestError.message || "报价看板数据加载失败");
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setLoadingSections((current) => ({
+          ...current,
+          today: false,
+          month: false,
+        }));
+      }
+    }
+  }, [currentMonth, today]);
 
   useEffect(() => {
     const controller = new AbortController();
-    loadSection(
-      "month",
-      monthDateRange(currentMonth),
-      setMonthData,
-      controller.signal,
-    );
+    loadInitialDashboard(controller.signal);
     return () => controller.abort();
-  }, [currentMonth, loadSection]);
+  }, [loadInitialDashboard]);
 
   useEffect(() => {
+    if (officerRange.startDate === today && officerRange.endDate === today) {
+      setOfficerData(null);
+      setLoadingSections((current) => ({ ...current, officer: false }));
+      return undefined;
+    }
     const controller = new AbortController();
     loadSection(
       "officer",
@@ -453,9 +486,14 @@ export default function QuoteDashboardPage() {
       controller.signal,
     );
     return () => controller.abort();
-  }, [loadSection, officerRange]);
+  }, [loadSection, officerRange, today]);
 
   useEffect(() => {
+    if (regionMonth === currentMonth) {
+      setRegionData(null);
+      setLoadingSections((current) => ({ ...current, region: false }));
+      return undefined;
+    }
     const controller = new AbortController();
     loadSection(
       "region",
@@ -464,9 +502,14 @@ export default function QuoteDashboardPage() {
       controller.signal,
     );
     return () => controller.abort();
-  }, [loadSection, regionMonth]);
+  }, [currentMonth, loadSection, regionMonth]);
 
   useEffect(() => {
+    if (businessMonth === currentMonth) {
+      setBusinessData(null);
+      setLoadingSections((current) => ({ ...current, business: false }));
+      return undefined;
+    }
     const controller = new AbortController();
     loadSection(
       "business",
@@ -475,22 +518,24 @@ export default function QuoteDashboardPage() {
       controller.signal,
     );
     return () => controller.abort();
-  }, [businessMonth, loadSection]);
+  }, [businessMonth, currentMonth, loadSection]);
 
   const refreshAll = useCallback(() => {
     setError("");
-    loadSection("today", { startDate: today, endDate: today }, setTodayData);
-    loadSection("month", monthDateRange(currentMonth), setMonthData);
-    loadSection(
-      "officer",
-      officerRange,
-      setOfficerData,
-    );
-    loadSection("region", monthDateRange(regionMonth), setRegionData);
-    loadSection("business", monthDateRange(businessMonth), setBusinessData);
+    loadInitialDashboard();
+    if (officerRange.startDate !== today || officerRange.endDate !== today) {
+      loadSection("officer", officerRange, setOfficerData);
+    }
+    if (regionMonth !== currentMonth) {
+      loadSection("region", monthDateRange(regionMonth), setRegionData);
+    }
+    if (businessMonth !== currentMonth) {
+      loadSection("business", monthDateRange(businessMonth), setBusinessData);
+    }
   }, [
     businessMonth,
     currentMonth,
+    loadInitialDashboard,
     loadSection,
     officerRange,
     regionMonth,
@@ -500,9 +545,9 @@ export default function QuoteDashboardPage() {
   const loading = Object.values(loadingSections).some(Boolean);
   const todayActiveData = scopedDashboard(todayData, scope);
   const monthActiveData = scopedDashboard(monthData, scope);
-  const officerActiveData = scopedDashboard(officerData, scope);
-  const regionActiveData = scopedDashboard(regionData, scope);
-  const businessActiveData = scopedDashboard(businessData, scope);
+  const officerActiveData = scopedDashboard(officerData || todayData, scope);
+  const regionActiveData = scopedDashboard(regionData || monthData, scope);
+  const businessActiveData = scopedDashboard(businessData || monthData, scope);
   const todaySummary = todayActiveData?.summary || {
     fileCount: 0,
     unitPrice: 0,
@@ -525,18 +570,11 @@ export default function QuoteDashboardPage() {
     }).format(new Date(monthData.checkedAt));
   }, [monthData?.checkedAt]);
 
-  if (loading && (!todayData || !monthData || !officerData || !regionData || !businessData)) {
-    return (
-      <PageTransition className="quote-dashboard-page" aria-label="报价看板加载中">
-        <div className="quote-dashboard-skeleton quote-dashboard-skeleton-header" />
-        <div className="quote-dashboard-skeleton quote-dashboard-skeleton-metrics" />
-        <div className="quote-dashboard-skeleton quote-dashboard-skeleton-body" />
-      </PageTransition>
-    );
-  }
-
   return (
-    <PageTransition className="quote-dashboard-page">
+    <PageTransition
+      className={`quote-dashboard-page ${loading ? "is-loading" : ""}`.trim()}
+      aria-busy={loading}
+    >
       <header className="quote-dashboard-header">
         <div className="quote-dashboard-title">
           <div>
@@ -574,7 +612,13 @@ export default function QuoteDashboardPage() {
         </div>
       )}
 
-      <section className="quote-dashboard-kpis" aria-label="报价核心指标">
+      <section
+        className={`quote-dashboard-kpis ${
+          loadingSections.today || loadingSections.month ? "is-loading" : ""
+        }`.trim()}
+        aria-label="报价核心指标"
+        aria-busy={loadingSections.today || loadingSections.month}
+      >
         <MetricCard
           icon={ClipboardList}
           label="今日报价"

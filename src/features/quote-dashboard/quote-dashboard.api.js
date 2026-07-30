@@ -7,3 +7,17 @@ export function getQuoteDashboard({ signal, startDate, endDate } = {}) {
   const query = search.size > 0 ? `?${search.toString()}` : "";
   return getJson(`/api/quote-dashboard${query}`, { signal });
 }
+
+export function getInitialQuoteDashboard({
+  signal,
+  today,
+  monthStartDate,
+  monthEndDate,
+} = {}) {
+  const search = new URLSearchParams({
+    today,
+    monthStartDate,
+    monthEndDate,
+  });
+  return getJson(`/api/quote-dashboard/initial?${search.toString()}`, { signal });
+}

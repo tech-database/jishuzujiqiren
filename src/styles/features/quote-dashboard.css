@@ -106,6 +106,17 @@
   gap: 10px;
 }
 
+.quote-dashboard-kpis .quote-kpi,
+.quote-report-panel {
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
+.quote-dashboard-kpis.is-loading .quote-kpi,
+.quote-report-panel.is-loading {
+  opacity: 0.58;
+  filter: saturate(0.72);
+}
+
 .quote-dashboard-header-scope {
   display: inline-flex;
   flex: 0 0 auto;
@@ -745,14 +756,6 @@
   background: linear-gradient(90deg, #edf2f8 25%, #f7f9fc 50%, #edf2f8 75%);
   background-size: 200% 100%;
   animation: quote-dashboard-shimmer 1.2s linear infinite;
-}
-
-.quote-dashboard-skeleton-header {
-  min-height: 74px;
-}
-
-.quote-dashboard-skeleton-metrics {
-  min-height: 112px;
 }
 
 .quote-dashboard-skeleton-body {

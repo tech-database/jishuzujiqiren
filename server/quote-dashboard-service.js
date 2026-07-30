@@ -296,13 +296,13 @@ export async function queryQuoteDashboard(
     if (category === "软体") addQuoteRecord(categoryStats.soft, quoteData);
   }
 
-  for (const tableKey of drawingTableKeys()) {
+  const drawingResults = await Promise.all(drawingTableKeys().map(async (tableKey) => {
     let tableConfig;
     try {
       tableConfig = getBitableConfig(tableKey);
     } catch (error) {
       warnings.push(error.message);
-      continue;
+      return null;
     }
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
     const required = [
@@ -316,13 +316,19 @@ export async function queryQuoteDashboard(
     const missing = required.filter((fieldName) => !fieldTypes.has(fieldName));
     if (missing.length > 0) {
       warnings.push(`${tableConfig.label}表缺少字段：${missing.join("、")}`);
-      continue;
+      return null;
     }
     const drawingRecords = await listCachedBitableRecords(token, tableConfig, {
       startDate: range.startDate,
       endDate: range.endDate,
       fieldNames: required,
     });
+    return { tableKey, drawingRecords };
+  }));
+
+  for (const drawingResult of drawingResults) {
+    if (!drawingResult) continue;
+    const { tableKey, drawingRecords } = drawingResult;
     for (const record of drawingRecords) {
       const fields = record.fields || {};
       if (!isOrderConfirmed(fields[drawingOrderField])) continue;
