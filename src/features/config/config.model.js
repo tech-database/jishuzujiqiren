@@ -6,6 +6,8 @@ export const emptyConfig = {
   bitableTableId: "",
   paintBitableAppToken: "",
   paintBitableTableId: "",
+  quoteBitableAppToken: "",
+  quoteBitableTableId: "",
   replyEnabled: false,
   nameIdMap: {},
 };

@@ -8,5 +8,7 @@
 @import "./styles/features/people.css";
 @import "./styles/features/drawing.css";
 @import "./styles/features/import.css";
+@import "./styles/features/quote-statistics.css";
+@import "./styles/features/quote-dashboard.css";
 @import "./styles/features/assignment.css";
 @import "./styles/features/drawing-compact.css";

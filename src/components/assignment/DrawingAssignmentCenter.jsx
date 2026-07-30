@@ -3,11 +3,9 @@ import { CheckCircle2, Clock3, FileInput, Send, UserRoundCheck } from "lucide-re
 import { StatusBadge } from "../design-system";
 import { PageTransition } from "../motion";
 import { buildMaterialCodeSummary } from "../../utils/materialCodeUtils";
-import AssignmentActionBar from "./AssignmentActionBar";
 import AssignmentErrorPanel from "./AssignmentErrorPanel";
 import AssignmentResultPanel from "./AssignmentResultPanel";
 import AssignmentSummary from "./AssignmentSummary";
-import AssigneeSelector from "./AssigneeSelector";
 import MaterialCodeInput from "./MaterialCodeInput";
 
 export default function DrawingAssignmentCenter({
@@ -20,7 +18,6 @@ export default function DrawingAssignmentCenter({
   queryingClaims,
   configReady,
   updateClaimForm,
-  clearClaimForm,
   claimDrawing,
   completeDrawing,
   queryDrawingClaims,
@@ -28,6 +25,12 @@ export default function DrawingAssignmentCenter({
   const [errors, setErrors] = useState({});
   const summary = useMemo(() => buildMaterialCodeSummary(claimForm.materialCodes), [claimForm.materialCodes]);
   const busy = claiming || completingDrawing || queryingClaims;
+  const queryTableLabel =
+    claimQueryResult?.table === "paint"
+      ? "油漆"
+      : claimQueryResult?.table === "board"
+        ? "胶板"
+        : "任务";
   const flowSteps = [
     { label: "输入料号", icon: FileInput, done: summary.uniqueCount > 0, active: summary.uniqueCount === 0 },
     { label: "选择领取人", icon: UserRoundCheck, done: Boolean(claimForm.senderName.trim()), active: summary.uniqueCount > 0 && !claimForm.senderName.trim() },
@@ -85,8 +88,12 @@ export default function DrawingAssignmentCenter({
         })}
       </nav>
 
-      <AssignmentResultPanel state={claimState} assignee={claimForm.senderName} materialCount={summary.uniqueCount} />
-      <AssignmentErrorPanel state={claimState} materialCount={summary.uniqueCount} assignee={claimForm.senderName} disabled={!configReady || busy} onRetry={retryCurrentOperation} onDismiss={() => updateClaimForm("dismissState", "")} />
+      {claimState?.operation !== "query" && (
+        <AssignmentResultPanel state={claimState} assignee={claimForm.senderName} materialCount={summary.uniqueCount} />
+      )}
+      {claimState?.operation !== "query" && (
+        <AssignmentErrorPanel state={claimState} materialCount={summary.uniqueCount} assignee={claimForm.senderName} disabled={!configReady || busy} onRetry={retryCurrentOperation} onDismiss={() => updateClaimForm("dismissState", "")} />
+      )}
 
       <section className="assignment-layout">
         <div className="assignment-form-column">
@@ -99,40 +106,33 @@ export default function DrawingAssignmentCenter({
               onChange={updateMaterialCodes}
               onClear={() => updateMaterialCodes("")}
             />
-            <AssigneeSelector
-              value={claimForm.senderName}
-              peopleRows={nameIdRows}
-              disabled={busy}
-              error={errors.senderName}
-              onChange={updateAssignee}
-            />
-            <AssignmentActionBar
-              completeDisabled={!configReady || busy || !summary.canSubmit}
-              queryDisabled={!configReady || busy}
-              querying={queryingClaims}
-              claiming={claiming}
-              completing={completingDrawing}
-              hasCodes={summary.hasCodes}
-              onClear={clearClaimForm}
-              onQuery={queryDrawingClaims}
-              onComplete={submitComplete}
-            />
           </section>
         </div>
 
         <AssignmentSummary
           summary={summary}
           assignee={claimForm.senderName}
-          submitting={busy}
-          disabled={!configReady || busy || !summary.canSubmit || !claimForm.senderName.trim()}
-          onSubmit={submitClaim}
+          peopleRows={nameIdRows}
+          assigneeError={errors.senderName}
+          busy={busy}
+          claiming={claiming}
+          completing={completingDrawing}
+          querying={queryingClaims}
+          claimDisabled={!configReady || busy || !summary.canSubmit || !claimForm.senderName.trim()}
+          completeDisabled={!configReady || busy || !summary.canSubmit}
+          queryDisabled={!configReady || busy}
+          onAssigneeChange={updateAssignee}
+          onClaim={submitClaim}
+          onComplete={submitComplete}
+          onQueryBoard={() => queryDrawingClaims("board")}
+          onQueryPaint={() => queryDrawingClaims("paint")}
         />
       </section>
 
       {claimQueryResult && (
         <section className="assignment-query-panel" aria-label="未领取查询结果">
           <header>
-            <div className="assignment-step-heading compact"><span>4</span><div><h2>查看结果</h2><p>本次会话未领取图纸</p></div></div>
+            <div className="assignment-step-heading compact"><span>4</span><div><h2>{queryTableLabel}未领取查询结果</h2><p>结果显示在当前操作区下方</p></div></div>
             <StatusBadge tone={claimQueryResult.count > 0 ? "warning" : "success"}>
               {claimQueryResult.count > 0 ? `${claimQueryResult.count} 条未领取` : "全部已领取"}
             </StatusBadge>

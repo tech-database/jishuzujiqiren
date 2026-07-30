@@ -55,11 +55,11 @@ export async function parseSpreadsheetBuffer(buffer, { fileName = "" } = {}) {
     });
   }
 
-  const sheet = workbook.worksheets[0];
+  const sheet = getActiveExcelJsWorksheet(workbook);
   if (!sheet) throw new Error("上传的表格中没有工作表。");
-  assertWorksheetLimits(sheet);
+  const bounds = assertWorksheetLimits(sheet);
 
-  const matrix = sheetToMatrix(sheet, imageMap);
+  const matrix = sheetToMatrix(sheet, imageMap, bounds);
   return recordsFromSpreadsheetMatrix(matrix);
 }
 
@@ -93,18 +93,24 @@ export async function parseLegacySpreadsheetBuffer(buffer) {
     cellHTML: false,
     cellStyles: false,
   });
-  const sheetName = workbook.SheetNames[0];
+  const sheetName = getActiveLegacyWorksheetName(workbook);
   if (!sheetName) throw new Error("上传的表格中没有工作表。");
   const sheet = workbook.Sheets[sheetName];
-  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
-  const rowCount = range.e.r - range.s.r + 1;
-  const columnCount = range.e.c - range.s.c + 1;
+  const populatedCells = Object.keys(sheet)
+    .filter((address) => !address.startsWith("!"))
+    .map((address) => ({ address, cell: sheet[address] }))
+    .filter(({ cell }) =>
+      cell && (cell.f || cell.v !== null && cell.v !== undefined && cell.v !== ""));
+  if (populatedCells.length === 0) throw new Error("上传的表格中没有可读取的数据。");
+  const coordinates = populatedCells.map(({ address }) => XLSX.utils.decode_cell(address));
+  const rowCount = Math.max(...coordinates.map(({ r }) => r)) + 1;
+  const columnCount = Math.max(...coordinates.map(({ c }) => c)) + 1;
   assertSpreadsheetDimensions(rowCount, columnCount);
 
   const matrix = [];
-  for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
     const row = [];
-    for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
       const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
       const cell = sheet[address];
       row.push(cell?.f ? `=${cell.f}` : cell?.w ?? cell?.v ?? "");
@@ -115,6 +121,30 @@ export async function parseLegacySpreadsheetBuffer(buffer) {
   const records = recordsFromSpreadsheetMatrix(matrix);
   records.warnings = ["旧版 .xls 已使用兼容模式读取，内嵌图片可能无法提取。"];
   return records;
+}
+
+function normalizeActiveSheetIndex(value, sheetCount) {
+  const index = Number(value);
+  if (!Number.isInteger(index) || index < 0 || index >= sheetCount) return 0;
+  return index;
+}
+
+export function getActiveLegacyWorksheetName(workbook) {
+  const sheetNames = workbook?.SheetNames || [];
+  const activeTab =
+    workbook?.Workbook?.WBView?.[0]?.activeTab ??
+    workbook?.Workbook?.Views?.[0]?.activeTab;
+  const activeSheetIndex = normalizeActiveSheetIndex(activeTab, sheetNames.length);
+  return sheetNames[activeSheetIndex] || sheetNames[0];
+}
+
+function getActiveExcelJsWorksheet(workbook) {
+  const worksheets = workbook.worksheets || [];
+  const activeTab = workbook.views
+    ?.map((view) => view?.activeTab)
+    .find((value) => Number.isInteger(Number(value)));
+  const activeSheetIndex = normalizeActiveSheetIndex(activeTab, worksheets.length);
+  return worksheets[activeSheetIndex] || worksheets[0];
 }
 
 function detectSpreadsheetFormat(buffer, fileName) {
@@ -164,9 +194,23 @@ try {
 }
 
 function assertWorksheetLimits(sheet) {
-  const rowCount = Number(sheet.rowCount || 0);
-  const columnCount = Number(sheet.columnCount || 0);
+  let rowCount = 0;
+  let columnCount = 0;
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    let rowHasValue = false;
+    row.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+      if (
+        cell.formula ||
+        cell.value !== null && cell.value !== undefined && cell.value !== ""
+      ) {
+        rowHasValue = true;
+        columnCount = Math.max(columnCount, columnNumber);
+      }
+    });
+    if (rowHasValue) rowCount = Math.max(rowCount, rowNumber);
+  });
   assertSpreadsheetDimensions(rowCount, columnCount);
+  return { rowCount, columnCount };
 }
 
 function assertSpreadsheetDimensions(rowCount, columnCount) {
@@ -182,16 +226,19 @@ function assertSpreadsheetDimensions(rowCount, columnCount) {
 }
 
 function excelJsCellValue(cell) {
-  if (cell.formula) return `=${cell.formula}`;
+  if (cell.formula) {
+    if (cell.result !== null && cell.result !== undefined) return cell.result;
+    return `=${cell.formula}`;
+  }
   if (cell.value === null || cell.value === undefined) return "";
   if (cell.value instanceof Date) return cell.text || cell.value.toISOString();
   return cell.text !== undefined && cell.text !== "" ? cell.text : cell.value;
 }
 
-function sheetToMatrix(sheet, imageMap) {
+function sheetToMatrix(sheet, imageMap, bounds = {}) {
   const rows = [];
-  const rowCount = Number(sheet.rowCount || 0);
-  const columnCount = Number(sheet.columnCount || 0);
+  const rowCount = Number(bounds.rowCount || 0);
+  const columnCount = Number(bounds.columnCount || 0);
   for (let r = 1; r <= rowCount; r += 1) {
     const row = [];
     for (let c = 1; c <= columnCount; c += 1) {
@@ -298,16 +345,27 @@ function findHeaderRowIndex(matrix, fieldNames) {
 function extractQuoteSheetMeta(matrix, headerIndex) {
   const meta = {};
   const rows = matrix.slice(0, Math.max(0, headerIndex));
-  for (const row of rows) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
     for (let index = 0; index < row.length; index += 1) {
       const label = cellToText(row[index]).replace(/\s/g, "");
       if (!label) continue;
-      if (label.includes("营销区域")) {
-        const value = findValueAfterLabel(row, index);
+      if (isQuoteMetaLabel(label, ["营销区域", "业务区域", "营销大区", "区域"])) {
+        const value = findQuoteMetaValue(rows, rowIndex, index, label, [
+          "营销区域",
+          "业务区域",
+          "营销大区",
+          "区域",
+        ]);
         if (value) meta["区域"] = value;
       }
-      if (label.includes("业务姓名")) {
-        const value = findValueAfterLabel(row, index);
+      if (isQuoteMetaLabel(label, ["业务姓名", "业务员姓名", "业务员", "业务"])) {
+        const value = findQuoteMetaValue(rows, rowIndex, index, label, [
+          "业务姓名",
+          "业务员姓名",
+          "业务员",
+          "业务",
+        ]);
         if (value) meta["业务"] = value;
       }
     }
@@ -315,12 +373,54 @@ function extractQuoteSheetMeta(matrix, headerIndex) {
   return meta;
 }
 
-function findValueAfterLabel(row, labelIndex) {
-  const ignoredLabels = /营销区域|业务姓名|业务代码|业务电话|工程项目名称|项目预算金额|跟单员|客户名称|客户代码|报价时间/;
+function isQuoteMetaLabel(text, aliases) {
+  return aliases.some((alias) => (
+    text === alias
+    || text.startsWith(`${alias}:`)
+    || text.startsWith(`${alias}：`)
+    || text.startsWith(`${alias}（`)
+    || text.startsWith(`${alias}(`)
+  ));
+}
+
+function inlineValueAfterLabel(text, aliases) {
+  for (const alias of aliases) {
+    if (text === alias) return "";
+    if (
+      !text.startsWith(`${alias}:`)
+      && !text.startsWith(`${alias}：`)
+      && !text.startsWith(`${alias}（`)
+      && !text.startsWith(`${alias}(`)
+    ) continue;
+    const suffix = text.slice(alias.length)
+      .replace(/^[（(][^）)]*[）)]/, "")
+      .replace(/^[:：]/, "")
+      .trim();
+    if (suffix) return suffix;
+  }
+  return "";
+}
+
+function findQuoteMetaValue(rows, rowIndex, labelIndex, label, aliases) {
+  const inlineValue = inlineValueAfterLabel(label, aliases);
+  if (inlineValue) return inlineValue;
+
+  const row = rows[rowIndex] || [];
+  const ignoredLabels = /营销区域|业务区域|营销大区|区域|业务姓名|业务员姓名|业务员|业务代码|业务电话|工程项目名称|项目预算金额|跟单员|客户名称|客户代码|报价时间/;
   for (let index = labelIndex + 1; index < Math.min(row.length, labelIndex + 8); index += 1) {
     const value = cellToText(row[index]);
-    if (!value || ignoredLabels.test(value)) continue;
+    if (!value) continue;
+    if (ignoredLabels.test(value)) break;
     return value;
+  }
+
+  for (let nextRowIndex = rowIndex + 1; nextRowIndex < Math.min(rows.length, rowIndex + 3); nextRowIndex += 1) {
+    const nextRow = rows[nextRowIndex] || [];
+    for (let index = Math.max(0, labelIndex - 1); index < Math.min(nextRow.length, labelIndex + 3); index += 1) {
+      const value = cellToText(nextRow[index]);
+      if (!value || ignoredLabels.test(value)) continue;
+      return value;
+    }
   }
   return "";
 }

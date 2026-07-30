@@ -48,6 +48,7 @@ export default function DataImportCenter({
             fileInputRef={fileInputRef}
             dragging={dragging}
             disabled={uploading}
+            multiple
             onDragStateChange={onDragStateChange}
             onFilesSelected={onFilesSelected}
           />

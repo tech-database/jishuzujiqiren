@@ -11,6 +11,8 @@ import { createHealthService } from "./health-service.js";
 import { createHomeDashboardRoutes } from "./home-dashboard-routes.js";
 import { createImportRoutes } from "./import-routes.js";
 import { createMonitoringRoutes } from "./monitoring-routes.js";
+import { createQuoteDashboardRoutes } from "./quote-dashboard-routes.js";
+import { createQuoteStatisticsRoutes } from "./quote-statistics-routes.js";
 import { createStatusSyncService } from "./status-sync-service.js";
 import { refreshDrawingOwnerRoster } from "./bot-core.js";
 import { getConfigStatus } from "./runtime-config.js";
@@ -69,6 +71,8 @@ const { registerRoutes: registerDrawingRoutes } = createDrawingRoutes({
   runStatusSync,
 });
 const { registerRoutes: registerImportRoutes } = createImportRoutes();
+const { registerRoutes: registerQuoteDashboardRoutes } = createQuoteDashboardRoutes();
+const { registerRoutes: registerQuoteStatisticsRoutes } = createQuoteStatisticsRoutes();
 const { registerRoutes: registerFeishuWebhookRoutes } = createFeishuWebhookRoutes({
   enabled: feishuWebhookEnabled,
 });
@@ -99,6 +103,8 @@ registerMonitoringRoutes(app);
 
 registerConfigRoutes(app);
 registerImportRoutes(app);
+registerQuoteDashboardRoutes(app);
+registerQuoteStatisticsRoutes(app);
 registerDrawingRoutes(app);
 registerHomeDashboardRoutes(app);
 registerFeishuWebhookRoutes(app);

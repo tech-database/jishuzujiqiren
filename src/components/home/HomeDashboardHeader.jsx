@@ -18,7 +18,7 @@ export function HomeDashboardHeader({ data, now }) {
   return (
     <header className="home-dashboard-header">
       <div className="home-title-line left" />
-      <h1>技术组 · 智能运行数据中心</h1>
+      <h1>技术组 · 绘图数据</h1>
       <div className="home-title-line right" />
       <div className="home-clock">
         <strong>{formatDate(now, true)}</strong>

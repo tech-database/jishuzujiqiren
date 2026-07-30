@@ -19,6 +19,11 @@ const tableDefinitions = {
     appTokenEnv: "FEISHU_PAINT_BITABLE_APP_TOKEN",
     tableIdEnv: "FEISHU_PAINT_BITABLE_TABLE_ID",
   },
+  quote: {
+    label: "报价统计",
+    appTokenEnv: "FEISHU_QUOTE_BITABLE_APP_TOKEN",
+    tableIdEnv: "FEISHU_QUOTE_BITABLE_TABLE_ID",
+  },
 };
 
 const envFileUrl = new URL("../.env", import.meta.url);
@@ -51,6 +56,7 @@ function readJsonRuntimeEnvValue(key, fallback = {}) {
 export function resolveTableKey(tableKey) {
   const text = String(tableKey || "").trim().toLowerCase();
   if (text === "paint" || text === "油漆") return "paint";
+  if (text === "quote" || text === "报价" || text === "报价统计") return "quote";
   return "board";
 }
 
@@ -135,7 +141,9 @@ export function getBitableConfig(tableKey = "board") {
 }
 
 export function drawingTableKeys(tableKey) {
-  return tableKey ? [resolveTableKey(tableKey)] : Object.keys(tableDefinitions);
+  if (!tableKey) return ["board", "paint"];
+  const resolved = resolveTableKey(tableKey);
+  return resolved === "quote" ? [] : [resolved];
 }
 
 export function ensureConfig() {

@@ -1,66 +1,160 @@
-import { useMemo, useState } from "react";
-import { Check, UserRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
 
 function normalizePeople(rows = []) {
-  return rows.map((row) => ({ id: String(row.id || "").trim(), name: String(row.name || "").trim() })).filter((row) => row.name);
+  return [
+    ...new Set(
+      rows
+        .map((row) => String(row.name || "").trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export default function AssigneeSelector({ value, peopleRows, disabled, error, onChange }) {
-  const [query, setQuery] = useState("");
+  const [filterText, setFilterText] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const comboboxRef = useRef(null);
   const people = useMemo(() => normalizePeople(peopleRows), [peopleRows]);
   const filteredPeople = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
+    const keyword = filterText.trim().toLowerCase();
     if (!keyword) return people;
-    return people.filter((person) => `${person.name} ${person.id}`.toLowerCase().includes(keyword));
-  }, [people, query]);
+    return people.filter((name) => name.toLowerCase().includes(keyword));
+  }, [filterText, people]);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (!comboboxRef.current?.contains(event.target)) {
+        setOpen(false);
+        setActiveIndex(-1);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  const showOptions = () => {
+    if (disabled || people.length === 0) return;
+    setFilterText("");
+    setActiveIndex(-1);
+    setOpen(true);
+  };
+
+  const selectPerson = (name) => {
+    onChange(name);
+    setFilterText("");
+    setActiveIndex(-1);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!open) {
+        setOpen(true);
+        setFilterText("");
+      }
+      if (filteredPeople.length === 0) return;
+      setActiveIndex((current) => {
+        if (event.key === "ArrowDown") return current >= filteredPeople.length - 1 ? 0 : current + 1;
+        return current <= 0 ? filteredPeople.length - 1 : current - 1;
+      });
+      return;
+    }
+    if (event.key === "Enter" && open && activeIndex >= 0) {
+      event.preventDefault();
+      selectPerson(filteredPeople[activeIndex]);
+    }
+  };
 
   return (
-    <section className="assignment-field-card assignment-assignee-step">
-      <div className="assignment-step-heading">
-        <span>2</span><div><h2>选择领取人</h2><p>可手工输入，也可从人员映射中搜索选择</p></div>
-      </div>
-      <label className="assignment-manual-assignee" htmlFor="assignment-assignee">
-        <span>领取人姓名</span>
+    <div className="assignment-manual-assignee assignment-summary-assignee">
+      <label htmlFor="assignment-assignee">选择领取人</label>
+      <div
+        className="assignment-assignee-combobox"
+        ref={comboboxRef}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setOpen(false);
+            setActiveIndex(-1);
+          }
+        }}
+      >
         <input
           id="assignment-assignee"
           data-testid="assignee-input"
           value={value}
           disabled={disabled}
-          placeholder="请输入领取人姓名"
-          onChange={(event) => onChange(event.target.value)}
+          placeholder={people.length > 0 ? "点击选择领取人" : "请输入领取人姓名"}
+          autoComplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="assignment-assignee-options"
+          aria-expanded={open}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "assignment-assignee-error" : undefined}
+          aria-activedescendant={
+            open && activeIndex >= 0 ? `assignment-assignee-option-${activeIndex}` : undefined
+          }
+          onClick={showOptions}
+          onFocus={showOptions}
+          onChange={(event) => {
+            setFilterText(event.target.value);
+            setActiveIndex(-1);
+            setOpen(people.length > 0);
+            onChange(event.target.value);
+          }}
+          onKeyDown={handleKeyDown}
         />
-      </label>
-      {people.length > 0 && (
-        <>
-          <input
-            className="assignment-person-search"
-            value={query}
-            disabled={disabled}
-            placeholder="搜索姓名或飞书用户 ID"
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label="搜索领取人"
-          />
-          <div className="assignment-person-list" aria-label="可选领取人">
+        <ChevronDown
+          className={open ? "assignment-assignee-chevron open" : "assignment-assignee-chevron"}
+          size={17}
+          aria-hidden="true"
+        />
+        {open && (
+          <div
+            className="assignment-assignee-dropdown"
+            id="assignment-assignee-options"
+            role="listbox"
+            aria-label="可选领取人姓名"
+          >
             {filteredPeople.length > 0 ? (
-              filteredPeople.slice(0, 8).map((person) => {
-                const selected = value === person.name;
+              filteredPeople.map((name, index) => {
+                const selected = value === name;
                 return (
-                  <button className={selected ? "selected" : ""} type="button" key={`${person.id}:${person.name}`} onClick={() => onChange(person.name)} disabled={disabled} aria-pressed={selected}>
-                    <span className="assignment-person-avatar"><UserRound size={17} /></span>
-                    <span className="assignment-person-copy"><strong>{person.name}</strong><small>{person.id || "绘图员"}</small></span>
-                    <span className="assignment-person-choice">{selected ? <Check size={14} /> : null}</span>
+                  <button
+                    className={selected || activeIndex === index ? "selected" : ""}
+                    id={`assignment-assignee-option-${index}`}
+                    type="button"
+                    role="option"
+                    key={name}
+                    aria-selected={selected}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectPerson(name)}
+                    disabled={disabled}
+                  >
+                    <span>{name}</span>
+                    {selected && <Check size={15} aria-hidden="true" />}
                   </button>
                 );
               })
             ) : (
-              <span>没有匹配的人员</span>
+              <span className="assignment-assignee-empty">没有匹配的姓名</span>
             )}
           </div>
-        </>
-      )}
+        )}
+      </div>
       {error && <p className="assignment-field-error" id="assignment-assignee-error">{error}</p>}
-    </section>
+    </div>
   );
 }

@@ -16,6 +16,7 @@ export {
   invalidateTenantAccessTokenCache,
 } from "./feishu-client.js";
 export {
+  getActiveLegacyWorksheetName,
   parseLegacySpreadsheetBuffer,
   parseSpreadsheetBuffer,
   spreadsheetLimits,

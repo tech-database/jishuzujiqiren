@@ -566,7 +566,6 @@ dt,
 .drawing-boundary-note,
 .people-boundary-note,
 .assignment-submit-state,
-.assignment-current-assignee,
 .import-target-row {
   border-color: #e1e8f2;
   color: var(--text-primary);
@@ -605,7 +604,6 @@ select,
 .command-search-field,
 .people-search-field,
 .drawing-search-field,
-.assignment-person-search,
 .monitoring-date-field input,
 .monitoring-table-selector,
 .table-selector {
@@ -640,8 +638,7 @@ select:focus,
 .control-input-shell:focus-within,
 .command-search-field:focus-within,
 .people-search-field:focus-within,
-.drawing-search-field:focus-within,
-.assignment-person-search:focus-within {
+.drawing-search-field:focus-within {
   border-color: var(--border-active);
   box-shadow: 0 0 0 3px rgba(77, 117, 255, 0.12);
   outline: 0;
@@ -807,8 +804,7 @@ button:disabled {
 }
 
 .workflow-strip,
-.import-action-bar,
-.assignment-action-bar {
+.import-action-bar {
   border-color: var(--border-default);
   color: var(--text-primary);
   background: var(--surface-primary);
@@ -951,8 +947,6 @@ button:disabled {
 .import-file-card,
 .drawing-task-row,
 .assignment-code-list,
-.assignment-person-list button,
-.assignment-person-list > span,
 .assignment-query-list article,
 .assignment-summary-metrics span,
 .assignment-code-list li,
@@ -962,18 +956,10 @@ button:disabled {
   background: #f8fafd;
 }
 
-.assignment-person-search,
 .assignment-field-card textarea {
   border-color: #d6e0ec !important;
   color: #1d2939 !important;
   background: #fff !important;
-}
-
-.assignment-person-list button:hover,
-.assignment-person-list button.selected {
-  border-color: #9cb9ec;
-  color: #244f94;
-  background: #edf4ff;
 }
 
 .monitoring-chart-card,
@@ -1230,4 +1216,3 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
-

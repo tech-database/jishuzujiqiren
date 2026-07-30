@@ -5,6 +5,7 @@ export default function FileDropZone({
   fileInputRef,
   dragging,
   disabled,
+  multiple = true,
   onDragStateChange,
   onFilesSelected,
 }) {
@@ -41,7 +42,7 @@ export default function FileDropZone({
         ref={fileInputRef}
         type="file"
         accept={IMPORT_FILE_ACCEPT}
-        multiple
+        multiple={multiple}
         disabled={disabled}
         onChange={(event) => onFilesSelected(event.target.files)}
         aria-label="选择 Excel 或 CSV 文件"
@@ -50,6 +51,7 @@ export default function FileDropZone({
         <FileSpreadsheet size={18} />
         浏览文件
       </button>
+      <small>{multiple ? "可同时选择多个文件" : "每次选择一份文件"}</small>
     </section>
   );
 }

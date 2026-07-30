@@ -13,6 +13,52 @@ import {
   invalidateBitableRecordCache,
 } from "./bitable-client.js";
 
+export function createBitableWriteError(response, data, { batch = false } = {}) {
+  const feishuCode = Number(data?.code);
+  if (response?.status === 403 || feishuCode === 91403) {
+    const error = new Error(
+      "报价统计表拒绝写入：请在该多维表中将“技术组机器人”添加为可编辑的文档应用，并确认应用已开通多维表格编辑权限。",
+    );
+    error.code = "BITABLE_WRITE_FORBIDDEN";
+    error.statusCode = 403;
+    error.details = { feishuCode: Number.isFinite(feishuCode) ? feishuCode : null };
+    return error;
+  }
+
+  const error = new Error(
+    batch
+      ? "批量写入飞书多维表记录失败，请稍后重试。"
+      : "写入飞书多维表记录失败，请稍后重试。",
+  );
+  error.details = { feishuCode: Number.isFinite(feishuCode) ? feishuCode : null };
+  return error;
+}
+
+export function assertRequiredBitableFields(fieldTypes, requiredFields, {
+  tableLabel = "目标",
+  convertedRecord,
+} = {}) {
+  const normalizedFields = [...new Set(
+    Array.from(requiredFields || [], (field) => String(field || "").trim()).filter(Boolean),
+  )];
+  if (normalizedFields.length === 0) return;
+
+  const missingFields = normalizedFields.filter((field) => !fieldTypes.has(field));
+  const unwritableFields = convertedRecord
+    ? normalizedFields.filter((field) => !Object.prototype.hasOwnProperty.call(convertedRecord, field))
+    : [];
+  if (missingFields.length === 0 && unwritableFields.length === 0) return;
+
+  const parts = [];
+  if (missingFields.length > 0) parts.push(`缺少字段：${missingFields.join("、")}`);
+  if (unwritableFields.length > 0) parts.push(`字段无法写入：${unwritableFields.join("、")}`);
+  const error = new Error(`${tableLabel}多维表结构不匹配，${parts.join("；")}。请检查表头名称和字段类型。`);
+  error.code = "BITABLE_SCHEMA_MISMATCH";
+  error.statusCode = 409;
+  error.details = { missingFields, unwritableFields };
+  throw error;
+}
+
 function normalizeValue(value) {
   if (typeof value !== "string") return value;
   const trimmed = value.trim();
@@ -168,7 +214,7 @@ async function convertRecordByFieldTypes(
 }
 
 export function createRecordImportService({ assertNoDuplicateMaterialCodesBeforeCreate }) {
-  async function createBitableRecords(records, { tableKey } = {}) {
+  async function createBitableRecords(records, { tableKey, requiredFields = [] } = {}) {
     if (!Array.isArray(records)) throw new Error("写入记录格式无效");
     if (records.length > spreadsheetLimits.importRows) {
       throw new Error(
@@ -178,6 +224,9 @@ export function createRecordImportService({ assertNoDuplicateMaterialCodesBefore
     const token = await getTenantAccessToken();
     const tableConfig = getBitableConfig(tableKey);
     const fieldTypes = await getBitableFieldMap(token, tableConfig);
+    assertRequiredBitableFields(fieldTypes, requiredFields, {
+      tableLabel: tableConfig.label,
+    });
     await assertNoDuplicateMaterialCodesBeforeCreate(token, tableConfig, fieldTypes, records);
     const uploadCache = new Map();
     const convertedRecords = [];
@@ -191,6 +240,10 @@ export function createRecordImportService({ assertNoDuplicateMaterialCodesBefore
         uploadCache,
         warnings,
       );
+      assertRequiredBitableFields(fieldTypes, requiredFields, {
+        tableLabel: tableConfig.label,
+        convertedRecord: converted,
+      });
       if (Object.keys(converted).length === 0) {
         warnings.push("已跳过 1 行空白记录。");
         continue;
@@ -225,11 +278,7 @@ export function createRecordImportService({ assertNoDuplicateMaterialCodesBefore
       ),
     });
     if (!response.ok || data.code !== 0) {
-      throw new Error(
-        batch
-          ? "批量写入飞书多维表记录失败，请稍后重试。"
-          : "写入飞书多维表记录失败，请稍后重试。",
-      );
+      throw createBitableWriteError(response, data, { batch });
     }
     const created = batch ? data.data?.records || [] : [data.data?.record];
     created.warnings = warnings;

@@ -32,7 +32,15 @@ test("detects normalized config changes and sensitive keys", () => {
   const baseline = { appId: "app-id", replyEnabled: false };
   assert.equal(isConfigDirty({ appId: "app-id", replyEnabled: false }, baseline), false);
   assert.equal(isConfigDirty({ appId: "new-id", replyEnabled: false }, baseline), true);
+  assert.equal(
+    isConfigDirty(
+      { appId: "app-id", replyEnabled: false, quoteBitableTableId: "quote-table" },
+      baseline,
+    ),
+    true,
+  );
   assert.equal(isSensitiveConfigKey("appSecret"), true);
+  assert.equal(isSensitiveConfigKey("quoteBitableAppToken"), true);
   assert.equal(isSensitiveConfigKey("appId"), false);
 });
 

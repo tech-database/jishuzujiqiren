@@ -96,12 +96,12 @@ export function useDrawingController(targetTable) {
     }
   }
 
-  async function queryDrawingClaims() {
+  async function queryDrawingClaims(tableKey = targetTable) {
     setQueryingClaims(true);
     setClaimState(null);
     setClaimQueryResult(null);
     try {
-      const data = await queryUnclaimedDrawings(targetTable);
+      const data = await queryUnclaimedDrawings(tableKey);
       if (!data.ok) throw new Error(data.error);
       setClaimState({
         ok: true,

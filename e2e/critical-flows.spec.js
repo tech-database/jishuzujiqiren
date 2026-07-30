@@ -154,6 +154,95 @@ test("领图写入流程会提交标准请求并显示成功结果", async ({ pa
   });
 });
 
+test("领取人输入框会展开仅含姓名的人员下拉选项", async ({ page }) => {
+  await mockApi(page, {
+    handlers: {
+      "/api/config": async () => ({
+        body: {
+          ok: true,
+          config: {
+            nameIdMap: {
+              ou_test_zhang: "张三",
+              ou_test_li: "李四",
+            },
+          },
+          status: { ready: true, fieldMap: {}, nameIdMap: {} },
+        },
+      }),
+    },
+  });
+  await page.goto("/drawing");
+
+  const assigneeInput = page.getByTestId("assignee-input");
+  await assigneeInput.click();
+
+  const options = page.locator(".assignment-assignee-dropdown [role='option']");
+  await expect(options).toHaveCount(2);
+  await expect(page.getByRole("option", { name: "张三" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "李四" })).toBeVisible();
+  await expect(page.getByText("ou_test_zhang")).toHaveCount(0);
+
+  await page.getByRole("option", { name: "张三" }).click();
+  await expect(assigneeInput).toHaveValue("张三");
+  await expect(page.locator(".assignment-assignee-dropdown")).toHaveCount(0);
+});
+
+test("绘图完成按钮不要求选择领取人并提交料号", async ({ page }) => {
+  let submitted;
+  await mockApi(page, {
+    handlers: {
+      "/api/complete-drawing": async (request) => {
+        submitted = request.postDataJSON();
+        return {
+          ok: true,
+          count: 1,
+          materialCodes: ["A-002"],
+        };
+      },
+    },
+  });
+  await page.goto("/drawing");
+  await page.getByTestId("material-code-input").fill("A-002");
+  await page.getByTestId("complete-submit").click();
+
+  await expect(page.locator(".assignment-result-panel")).toBeVisible();
+  expect(submitted).toEqual({
+    materialCodes: ["A-002"],
+    tableKey: "board",
+  });
+});
+
+test("胶板和油漆未领取按钮分别查询对应表", async ({ page }) => {
+  const submitted = [];
+  await mockApi(page, {
+    handlers: {
+      "/api/query-unclaimed-drawings": async (request) => {
+        const body = request.postDataJSON();
+        submitted.push(body);
+        return {
+          ok: true,
+          table: body.tableKey,
+          count: 0,
+          items: [],
+        };
+      },
+    },
+  });
+  await page.goto("/drawing");
+
+  await page.getByTestId("query-board-unclaimed").click();
+  await expect(page.locator(".assignment-query-panel")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "胶板未领取查询结果" })).toBeVisible();
+  await expect(page.locator(".assignment-result-panel")).toHaveCount(0);
+  await page.getByTestId("query-paint-unclaimed").click();
+  await expect(page.getByRole("heading", { name: "油漆未领取查询结果" })).toBeVisible();
+
+  expect(submitted).toEqual([
+    { tableKey: "board" },
+    { tableKey: "paint" },
+  ]);
+});
+
 test("下单确认写入流程会去重料号并展示服务端统计", async ({ page }) => {
   let submitted;
   await mockApi(page, {

@@ -152,7 +152,8 @@ export function createStatusSyncService({
     const errors = [];
     try {
       const configuredTableKeys = Object.entries(readConfigStatus().tables || {})
-        .filter(([, tableStatus]) => tableStatus.ready)
+        .filter(([tableKey, tableStatus]) =>
+          ["board", "paint"].includes(tableKey) && tableStatus.ready)
         .map(([tableKey]) => tableKey);
       for (const tableKey of configuredTableKeys) {
         const range = { ...defaultStatusDateRange(), tableKey };
@@ -221,7 +222,8 @@ export function createStatusSyncService({
     const errors = [];
     try {
       const configuredTableKeys = Object.entries(readConfigStatus().tables || {})
-        .filter(([, tableStatus]) => tableStatus.ready)
+        .filter(([tableKey, tableStatus]) =>
+          ["board", "paint"].includes(tableKey) && tableStatus.ready)
         .map(([tableKey]) => tableKey);
       for (const tableKey of configuredTableKeys) {
         try {

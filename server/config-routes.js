@@ -21,6 +21,8 @@ function publicConfig(readConfigStatus) {
     bitableTableId: process.env.FEISHU_BITABLE_TABLE_ID || "",
     paintBitableAppToken: process.env.FEISHU_PAINT_BITABLE_APP_TOKEN || "",
     paintBitableTableId: process.env.FEISHU_PAINT_BITABLE_TABLE_ID || "",
+    quoteBitableAppToken: process.env.FEISHU_QUOTE_BITABLE_APP_TOKEN || "",
+    quoteBitableTableId: process.env.FEISHU_QUOTE_BITABLE_TABLE_ID || "",
     replyEnabled: process.env.FEISHU_REPLY_ENABLED === "true",
     nameIdMap: readConfigStatus().nameIdMap || {},
   };
@@ -35,6 +37,8 @@ function buildRuntimeConfigEntries(config, port) {
     FEISHU_BITABLE_TABLE_ID: config.bitableTableId || "",
     FEISHU_PAINT_BITABLE_APP_TOKEN: config.paintBitableAppToken || "",
     FEISHU_PAINT_BITABLE_TABLE_ID: config.paintBitableTableId || "",
+    FEISHU_QUOTE_BITABLE_APP_TOKEN: config.quoteBitableAppToken || "",
+    FEISHU_QUOTE_BITABLE_TABLE_ID: config.quoteBitableTableId || "",
     FIELD_MAP_JSON: JSON.stringify(config.fieldMap || {}),
     NAME_ID_MAP_JSON: JSON.stringify(config.nameIdMap || {}),
     FEISHU_REPLY_ENABLED: config.replyEnabled ? "true" : "false",
@@ -95,6 +99,8 @@ export function createConfigRoutes({
             bitableTableId: "",
             paintBitableAppToken: "",
             paintBitableTableId: "",
+            quoteBitableAppToken: "",
+            quoteBitableTableId: "",
             replyEnabled: false,
             nameIdMap: {},
           };

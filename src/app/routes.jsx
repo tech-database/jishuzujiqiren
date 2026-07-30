@@ -1,6 +1,8 @@
 import React from "react";
 import {
   Activity,
+  BadgeDollarSign,
+  CircleDollarSign,
   ChartNoAxesCombined,
   Database,
   FileUp,
@@ -33,17 +35,25 @@ export const DataAnalyticsCenter = React.lazy(
   () => import("../features/analytics/AnalyticsPage.jsx"),
 );
 export const HomeDashboard = React.lazy(() => import("../features/home/HomePage.jsx"));
+export const QuoteStatisticsCenter = React.lazy(
+  () => import("../features/quote-statistics/QuoteStatisticsPage.jsx"),
+);
+export const QuoteDashboard = React.lazy(
+  () => import("../features/quote-dashboard/QuoteDashboardPage.jsx"),
+);
 
 export const appRoutes = [
-  { id: "home", path: "/home", title: "首页", icon: House },
+  { id: "quote-home", path: "/quote-home", title: "报价首页", icon: CircleDollarSign },
+  { id: "home", path: "/home", title: "绘图首页", icon: House },
   { id: "connection", path: "/connection", title: "连接配置", icon: Settings2, adminOnly: true },
   { id: "mapping", path: "/mapping", title: "字段映射", icon: Database, badge: "fields" },
   { id: "commands", path: "/commands", title: "飞书口令", icon: MessageSquareText },
   { id: "people", path: "/people", title: "人员映射", icon: UsersRound, adminOnly: true },
-  { id: "status", path: "/status", title: "状态检测", icon: Activity },
+  { id: "status", path: "/status", title: "绘图状态检测", icon: Activity },
   { id: "owners", path: "/owners", title: "绘图人动态", icon: UsersRound },
-  { id: "analytics", path: "/analytics", title: "数据看板", icon: ChartNoAxesCombined },
-  { id: "upload", path: "/upload", title: "新增", icon: FileUp },
+  { id: "analytics", path: "/analytics", title: "绘图数据看板", icon: ChartNoAxesCombined },
+  { id: "quotes", path: "/quotes", title: "报价统计", icon: BadgeDollarSign },
+  { id: "upload", path: "/upload", title: "绘图新增", icon: FileUp },
   { id: "drawing", path: "/drawing", title: "领图", icon: Images },
   { id: "orders", path: "/orders", title: "下单确认", icon: PackageCheck },
 ];

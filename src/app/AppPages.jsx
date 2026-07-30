@@ -12,9 +12,11 @@ import {
   MonitoringCenter,
   OrderConfirmationCenter,
   PeopleMappingCenter,
+  QuoteDashboard,
+  QuoteStatisticsCenter,
 } from "./routes.jsx";
 
-const noRefreshTabs = new Set(["home", "commands", "status", "analytics"]);
+const noRefreshTabs = new Set(["home", "commands", "status", "analytics", "quote-home", "quotes"]);
 
 export function AppPages({ activeTab, adminAuthenticated, controllers }) {
   const {
@@ -93,6 +95,20 @@ export function AppPages({ activeTab, adminAuthenticated, controllers }) {
             setTargetTable={setTargetTable}
             targetTable={targetTable}
           />
+        </React.Suspense>
+      )}
+
+      {activeTab === "quotes" && (
+        <React.Suspense fallback={<div className="glass-skeleton quote-statistics-skeleton" />}>
+          <QuoteStatisticsCenter
+            quoteTableReady={Boolean(config.status?.tables?.quote?.ready)}
+          />
+        </React.Suspense>
+      )}
+
+      {activeTab === "quote-home" && (
+        <React.Suspense fallback={<div className="quote-dashboard-skeleton quote-dashboard-skeleton-body" />}>
+          <QuoteDashboard />
         </React.Suspense>
       )}
 

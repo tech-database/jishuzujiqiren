@@ -54,8 +54,7 @@
   box-shadow: none;
 }
 
-.import-dropzone::after {
-  content: "可同时选择多个文件";
+.import-dropzone > small {
   color: #7a889b;
   font-size: 0.75rem;
 }
@@ -424,4 +423,3 @@
   .import-action-bar > div:last-child { width: 100%; }
   .import-action-bar .glass-button { flex: 1 1 0; }
 }
-

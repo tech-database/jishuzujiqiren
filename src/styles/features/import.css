@@ -115,6 +115,11 @@
   line-height: 1.6;
 }
 
+.import-dropzone > small {
+  color: var(--color-subtle);
+  font-size: 12px;
+}
+
 .import-dropzone input {
   position: absolute;
   inline-size: 1px;
@@ -455,4 +460,3 @@
     transition: none !important;
   }
 }
-

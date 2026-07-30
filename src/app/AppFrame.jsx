@@ -31,7 +31,9 @@ export function AppFrame({
       <div
         className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
           mobileNavigationOpen ? "mobile-nav-open" : ""
-        } ${activeTab === "home" ? "home-active" : ""}`}
+        } ${activeTab === "home" ? "home-active" : ""} ${
+          activeTab === "quote-home" ? "quote-home-active" : ""
+        }`}
       >
         <AppSidebar
           activeTab={activeTab}
@@ -73,15 +75,17 @@ export function AppFrame({
               </div>
             </div>
 
-            <RobotStatusWidget
-              activeTab={activeTab}
-              configReady={configReady}
-              healthStatus={healthStatus}
-              statusResult={statusResult}
-              ownerStats={ownerStats}
-              uploadState={uploadState}
-              uploadFiles={uploadFiles}
-            />
+            {activeTab === "status" && (
+              <RobotStatusWidget
+                activeTab={activeTab}
+                configReady={configReady}
+                healthStatus={healthStatus}
+                statusResult={statusResult}
+                ownerStats={ownerStats}
+                uploadState={uploadState}
+                uploadFiles={uploadFiles}
+              />
+            )}
 
             <ProgressBar active={configLoading} label="正在刷新配置" />
             {children}

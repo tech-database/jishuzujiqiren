@@ -1,4 +1,9 @@
-const SENSITIVE_KEYS = new Set(["appSecret", "bitableAppToken", "paintBitableAppToken"]);
+const SENSITIVE_KEYS = new Set([
+  "appSecret",
+  "bitableAppToken",
+  "paintBitableAppToken",
+  "quoteBitableAppToken",
+]);
 
 export function isSensitiveConfigKey(key) {
   return SENSITIVE_KEYS.has(key);
@@ -13,6 +18,8 @@ function normalizeConfigSnapshot(config = {}) {
     bitableTableId: String(config.bitableTableId || ""),
     paintBitableAppToken: String(config.paintBitableAppToken || ""),
     paintBitableTableId: String(config.paintBitableTableId || ""),
+    quoteBitableAppToken: String(config.quoteBitableAppToken || ""),
+    quoteBitableTableId: String(config.quoteBitableTableId || ""),
     replyEnabled: Boolean(config.replyEnabled),
   };
 }

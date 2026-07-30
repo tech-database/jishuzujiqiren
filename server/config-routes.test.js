@@ -13,6 +13,8 @@ const runtimeConfigKeys = [
   "FEISHU_BITABLE_TABLE_ID",
   "FEISHU_PAINT_BITABLE_APP_TOKEN",
   "FEISHU_PAINT_BITABLE_TABLE_ID",
+  "FEISHU_QUOTE_BITABLE_APP_TOKEN",
+  "FEISHU_QUOTE_BITABLE_TABLE_ID",
   "FIELD_MAP_JSON",
   "NAME_ID_MAP_JSON",
   "FEISHU_REPLY_ENABLED",
@@ -129,6 +131,8 @@ test("config POST merges the existing env file and refreshes runtime config", as
         appSecret: "new-secret",
         bitableAppToken: "board-app",
         bitableTableId: "board-table",
+        quoteBitableAppToken: "quote-app",
+        quoteBitableTableId: "quote-table",
         fieldMap: { materialCode: "料号" },
         nameIdMap: { 张三: "user-1" },
         replyEnabled: true,
@@ -142,6 +146,8 @@ test("config POST merges the existing env file and refreshes runtime config", as
     const saved = await readFile(envPath, "utf8");
     assert.match(saved, /KEEP_ME='yes'/);
     assert.match(saved, /FEISHU_APP_ID='new-app'/);
+    assert.match(saved, /FEISHU_QUOTE_BITABLE_APP_TOKEN='quote-app'/);
+    assert.match(saved, /FEISHU_QUOTE_BITABLE_TABLE_ID='quote-table'/);
     assert.match(saved, /FEISHU_REPLY_ENABLED='true'/);
   } finally {
     restoreEnvironment(previousEnvironment);

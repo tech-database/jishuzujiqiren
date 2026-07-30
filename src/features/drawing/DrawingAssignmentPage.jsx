@@ -13,7 +13,6 @@ export default function DrawingAssignmentPage({ configReady, controller: c, name
       configReady={configReady}
       updateClaimForm={c.updateClaimForm}
       removeMaterialCode={c.removeClaimMaterialCode}
-      clearClaimForm={c.clearClaimForm}
       claimDrawing={c.claimDrawing}
       completeDrawing={c.completeDrawing}
       queryDrawingClaims={c.queryDrawingClaims}

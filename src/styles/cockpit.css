@@ -625,7 +625,6 @@ select,
 .command-search-field,
 .people-search-field,
 .drawing-search-field,
-.assignment-person-search,
 .monitoring-date-field input,
 .monitoring-table-selector,
 .table-selector {
@@ -664,8 +663,7 @@ select:focus,
 .control-input-shell:focus-within,
 .command-search-field:focus-within,
 .people-search-field:focus-within,
-.drawing-search-field:focus-within,
-.assignment-person-search:focus-within {
+.drawing-search-field:focus-within {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(37, 136, 255, 0.12);
   outline: none;
@@ -706,8 +704,7 @@ select:focus,
 .glass-button.primary,
 .button.primary,
 .connection-action-buttons .primary,
-.import-action-bar .primary,
-.assignment-action-bar .primary {
+.import-action-bar .primary {
   border-color: rgba(91, 144, 255, 0.68);
   color: #fff;
   background: var(--gradient-primary);
@@ -782,7 +779,6 @@ button:disabled,
 .drawing-boundary-note,
 .people-boundary-note,
 .assignment-submit-state,
-.assignment-current-assignee,
 .import-target-row {
   border-color: rgba(79, 123, 203, 0.24);
   color: var(--text-primary);
@@ -815,8 +811,7 @@ button:disabled,
 
 .workflow-strip,
 .connection-action-bar,
-.import-action-bar,
-.assignment-action-bar {
+.import-action-bar {
   border-color: var(--border-default);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
@@ -970,7 +965,6 @@ button:disabled,
 .import-file-card,
 .drawing-task-row,
 .assignment-code-list,
-.assignment-person-list button,
 .assignment-query-list article {
   border-color: rgba(75, 119, 200, 0.24);
   color: var(--text-primary);
@@ -998,26 +992,12 @@ button:disabled,
   background: rgba(83, 18, 31, 0.3);
 }
 
-.assignment-person-list button:hover,
-.assignment-person-list button.selected {
-  border-color: rgba(62, 137, 255, 0.62);
-  color: #fff;
-  background: rgba(23, 67, 137, 0.38);
-}
-
-.assignment-person-search {
-  border-color: rgba(86, 133, 216, 0.3) !important;
-  color: var(--text-primary) !important;
-  background: rgba(3, 12, 27, 0.76) !important;
-}
-
 .assignment-field-card textarea {
   border-color: rgba(86, 133, 216, 0.3) !important;
   color: var(--text-primary) !important;
   background: rgba(3, 12, 27, 0.76) !important;
 }
 
-.assignment-person-list > span,
 .assignment-summary-metrics span,
 .assignment-code-list li,
 .assignment-code-empty {

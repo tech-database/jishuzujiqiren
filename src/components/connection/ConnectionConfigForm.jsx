@@ -123,6 +123,36 @@ export function ConnectionConfigForm({
       </ConfigSection>
 
       <ConfigSection
+        icon={FileSpreadsheet}
+        title="报价统计表配置"
+        description="报价统计使用独立多维表应用，需要填写对应的 App Token 和数据表 ID。"
+      >
+        <ConfigField configKey="quoteBitableAppToken">
+          <SecureInput
+            fieldKey="quoteBitableAppToken"
+            label="报价 App Token"
+            hint="报价统计多维表的 App Token。"
+            placeholder="请输入报价多维表 App Token"
+            value={config.quoteBitableAppToken}
+            sensitive
+            onChange={(value) => updateField("quoteBitableAppToken", value)}
+            onCopy={() => copyConfigValue("quoteBitableAppToken", config.quoteBitableAppToken)}
+          />
+        </ConfigField>
+        <ConfigField configKey="quoteBitableTableId">
+          <SecureInput
+            fieldKey="quoteBitableTableId"
+            label="报价统计表 ID"
+            hint="报价数据统计表的 Table ID。"
+            placeholder="请输入报价统计表 ID"
+            value={config.quoteBitableTableId}
+            onChange={(value) => updateField("quoteBitableTableId", value)}
+            onCopy={() => copyConfigValue("quoteBitableTableId", config.quoteBitableTableId)}
+          />
+        </ConfigField>
+      </ConfigSection>
+
+      <ConfigSection
         icon={Settings2}
         title="高级配置"
         description="保留现有布尔配置，不改变后端保存结构。"

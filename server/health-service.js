@@ -68,6 +68,7 @@ export function createHealthService({
       feishu: { ok: false, message: "" },
       board: { ok: false, message: "" },
       paint: { ok: false, message: "" },
+      quote: { ok: false, message: "" },
       websocket: { ok: false, message: "" },
     };
 
@@ -80,7 +81,7 @@ export function createHealthService({
     }
 
     if (token) {
-      for (const tableKey of ["board", "paint"]) {
+      for (const tableKey of ["board", "paint", "quote"]) {
         try {
           const result = await checkBitableTable(token, tableKey);
           checks[tableKey] = {
