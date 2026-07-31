@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { queryQuoteDashboard } from "./quote-dashboard-service.js";
+import {
+  normalizeQuoteOfficerName,
+  queryQuoteDashboard,
+} from "./quote-dashboard-service.js";
 
 function record(fields) {
   return { record_id: Math.random().toString(36), fields };
 }
+
+test("normalizes the historical typo in the quote officer name", () => {
+  assert.equal(normalizeQuoteOfficerName("胡燕琪"), "胡燕绮");
+  assert.equal(normalizeQuoteOfficerName("胡燕绮"), "胡燕绮");
+});
 
 test("summarizes officers and compares quote and confirmed orders in a selected range", async () => {
   const configs = {

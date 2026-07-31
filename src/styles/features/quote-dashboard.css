@@ -58,6 +58,40 @@
   gap: 9px;
 }
 
+.quote-dashboard-month-filter {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(180, 211, 250, 0.28);
+  border-radius: 8px;
+  color: #e9f3ff;
+  background: rgba(5, 24, 55, 0.28);
+  padding: 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.quote-dashboard-month-filter span {
+  font-weight: 700;
+}
+
+.quote-dashboard-month-filter input {
+  width: 104px;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quote-dashboard-month-filter:focus-within {
+  outline: 3px solid rgba(89, 173, 255, 0.38);
+  outline-offset: 2px;
+}
+
 .quote-dashboard-header-actions > small,
 .quote-dashboard-header-actions > button {
   gap: 6px;
@@ -261,7 +295,7 @@
 
 .quote-dashboard-reports {
   display: grid;
-  grid-template-columns: 300px repeat(2, minmax(0, 1fr));
+  grid-template-columns: 360px repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: start;
 }
@@ -918,7 +952,7 @@
 .quote-home-active .quote-dashboard-page {
   position: relative;
   isolation: isolate;
-  grid-template-rows: 58px 112px minmax(0, 1fr) 38px;
+  grid-template-rows: 58px 112px minmax(0, 1fr);
   gap: 9px;
   width: auto;
   height: calc(100% - 24px);
@@ -1012,6 +1046,21 @@
   background: rgba(240, 249, 255, 0.86);
   padding-inline: 8px;
   font-size: 10px;
+}
+
+.quote-home-active .quote-dashboard-month-filter {
+  min-height: 29px;
+  gap: 5px;
+  border-color: rgba(40, 126, 220, 0.38);
+  border-radius: 6px;
+  color: #1359aa;
+  background: rgba(240, 249, 255, 0.86);
+  padding-inline: 7px;
+  font-size: 10px;
+}
+
+.quote-home-active .quote-dashboard-month-filter input {
+  width: 95px;
 }
 
 .quote-home-active .quote-dashboard-header-actions > button:hover {
@@ -1128,31 +1177,56 @@
 .quote-kpi.quote-kpi-rate,
 .quote-home-active .quote-kpi.quote-kpi-rate {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: minmax(86px, 0.42fr) minmax(0, 0.58fr);
   align-items: center;
-  gap: 10px;
-  padding: 10px 13px;
+  gap: 16px;
+  padding: 8px 16px;
 }
 
 .quote-kpi-rate-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #183d7e;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+.quote-kpi-rate-title svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: #0b9cf0;
+  stroke-width: 2.5;
+}
+
+.quote-kpi-rate-copy {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.quote-kpi-rate-copy small {
+  color: #5f7da4;
+  font-size: 12px;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
 .quote-kpi-rate-gauge {
   position: relative;
   display: grid;
-  width: 72px;
-  height: 72px;
+  width: 90px;
+  height: 90px;
   place-items: center;
+  justify-self: center;
 }
 
 .quote-kpi-rate-gauge::before {
   content: "";
   grid-area: 1 / 1;
-  width: 62%;
+  width: 66%;
   aspect-ratio: 1;
   border-radius: 50%;
   background: linear-gradient(#fff, #eef8ff);
@@ -1174,12 +1248,12 @@
 
 .quote-kpi-rate-track {
   stroke: #dce9f5;
-  stroke-width: 9;
+  stroke-width: 11;
 }
 
 .quote-kpi-rate-value {
   stroke: #0fc6d2;
-  stroke-width: 9;
+  stroke-width: 11;
   filter: drop-shadow(0 0 3px rgba(15, 198, 210, 0.38));
 }
 
@@ -1203,16 +1277,16 @@
 .quote-kpi-rate-number > strong {
   overflow: visible;
   color: #0b286e;
-  font-size: 18px;
+  font-size: 24px;
   letter-spacing: -0.02em;
 }
 
 .quote-kpi-rate-number > strong.quote-rate-wide {
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .quote-kpi-rate-number > strong.quote-rate-long {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .quote-home-active .quote-dashboard-reports {
@@ -1247,6 +1321,39 @@
 .quote-home-active .quote-report-table,
 .quote-home-active .quote-region-table {
   height: auto;
+}
+
+.quote-home-active .quote-region-table-wrap {
+  display: flex;
+}
+
+.quote-home-active .quote-region-table {
+  height: 100%;
+}
+
+.quote-home-active .quote-region-table th,
+.quote-home-active .quote-region-table td {
+  height: 58px;
+  padding: 10px 14px;
+}
+
+.quote-home-active .quote-region-table thead th {
+  height: 40px;
+}
+
+.quote-home-active .quote-region-table tbody th,
+.quote-home-active .quote-region-table tbody td,
+.quote-home-active .quote-region-rate > strong {
+  font-size: 14px;
+}
+
+.quote-home-active .quote-region-rate {
+  gap: 6px;
+}
+
+.quote-home-active .quote-region-rate > span {
+  height: 8px;
+  border-radius: 4px;
 }
 
 .quote-home-active .quote-officer-cards {
@@ -1351,13 +1458,13 @@
 }
 
 .quote-home-active .quote-region-table thead th {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .quote-home-active .quote-region-table tbody th,
 .quote-home-active .quote-region-table tbody td,
 .quote-home-active .quote-region-rate > strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .quote-home-active .quote-rank {
@@ -1393,14 +1500,20 @@
 }
 
 @media (max-width: 1450px) {
+  .quote-home-active .quote-dashboard-month-filter span,
+  .quote-home-active .quote-dashboard-header-actions > small {
+    display: none;
+  }
+
   .quote-home-active .quote-dashboard-header::before,
   .quote-home-active .quote-dashboard-header::after {
     width: min(8vw, 105px);
   }
 
   .quote-home-active .quote-dashboard-title h1 {
-    font-size: 29px;
-    letter-spacing: 2px;
+    font-size: 27px;
+    letter-spacing: 1.5px;
+    transform: translateX(-10px);
   }
 
   .quote-home-active .quote-kpi {

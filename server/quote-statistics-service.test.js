@@ -22,7 +22,7 @@ test("normalizes manual quote and order entries for the shared statistics table"
     normalizeManualQuoteEntry({
       type: "下单",
       category: "软体",
-      quoteOfficer: "胡燕琪",
+      quoteOfficer: "胡燕绮",
       date: "2026-07-30",
       region: "华东区",
       business: "张三",
@@ -33,7 +33,7 @@ test("normalizes manual quote and order entries for the shared statistics table"
       类型: "下单",
       报价日期: "2026-07-30",
       类别: "软体",
-      报价员: "胡燕琪",
+      报价员: "胡燕绮",
       区域: "华东区",
       业务: "张三",
       数量: 3,
@@ -171,7 +171,7 @@ test("maps every supported quote officer to the configured category", () => {
     杨利伟: "胶板",
     邓翠萍: "胶板",
     朱海韵: "油漆",
-    胡燕琪: "软体",
+    胡燕绮: "软体",
   });
 });
 
@@ -197,7 +197,7 @@ test("rejects invalid officers, missing calculation columns and mixed sheet meta
   );
   assert.throws(
     () => summarizeQuoteRecords([{ 区域: "华南区", 业务: "张三", 销售单价: 3 }], {
-      quoteOfficer: "胡燕琪",
+      quoteOfficer: "胡燕绮",
     }),
     /未找到「数量」列/,
   );

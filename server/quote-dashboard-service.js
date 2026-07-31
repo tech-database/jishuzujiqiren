@@ -19,6 +19,9 @@ const quoteDateField = "报价日期";
 const quoteTypeField = "类型";
 const quoteCategoryField = "类别";
 const quoteOfficerField = "报价员";
+const quoteOfficerAliases = Object.freeze({
+  胡燕琪: "胡燕绮",
+});
 const quoteRegionField = "区域";
 const quoteBusinessField = "业务";
 const quoteUnitPriceField = "单价";
@@ -257,7 +260,7 @@ export async function queryQuoteDashboard(
   for (const record of quoteRecords) {
     const fields = record.fields || {};
     const recordDate = quoteRecordDate(fields[quoteDateField]);
-    const officerName = bitableValueToText(fields[quoteOfficerField]) || "未填写";
+    const officerName = normalizeQuoteOfficerName(fields[quoteOfficerField]);
     const category =
       bitableValueToText(fields[quoteCategoryField])
       || quoteOfficerCategories[officerName]
@@ -367,4 +370,8 @@ export function createQuoteDashboardService(overrides = {}) {
   return {
     queryQuoteDashboard: (options) => queryQuoteDashboard(options, dependencies),
   };
+}
+export function normalizeQuoteOfficerName(value) {
+  const name = bitableValueToText(value) || "未填写";
+  return quoteOfficerAliases[name] || name;
 }

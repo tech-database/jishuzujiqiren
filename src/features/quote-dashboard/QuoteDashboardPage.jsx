@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   RefreshCw,
   ShoppingCart,
+  TrendingUp,
   UsersRound,
 } from "lucide-react";
 import { PageTransition } from "../../components/motion/index.js";
@@ -57,6 +58,12 @@ function monthDateRange(month) {
   };
 }
 
+function formatMonthLabel(month, currentMonth) {
+  const [year, monthNumber] = String(month).split("-").map(Number);
+  const currentYear = Number(String(currentMonth).slice(0, 4));
+  return year === currentYear ? `${monthNumber}月` : `${year}年${monthNumber}月`;
+}
+
 function scopedDashboard(data, scope) {
   if (!data) return null;
   if (scope === "all") return data;
@@ -102,13 +109,13 @@ function MetricCard({ icon: Icon, label, value, note, tone }) {
       <div className="quote-kpi-content">
         <span>{label}</span>
         <strong title={value}>{value}</strong>
-        <small>{note}</small>
+        {note && <small>{note}</small>}
       </div>
     </article>
   );
 }
 
-function RateMetricCard({ rate }) {
+function RateMetricCard({ rate, monthLabel }) {
   const reduceMotion = useReducedMotion();
   const numericRate = Number.isFinite(Number(rate)) ? Number(rate) : 0;
   const visualRate = Math.min(100, Math.max(0, numericRate));
@@ -121,7 +128,7 @@ function RateMetricCard({ rate }) {
   return (
     <article
       className="quote-kpi quote-kpi-rate quote-kpi-cyan"
-      aria-label={`本月下单率 ${rate === null || rate === undefined ? "暂无数据" : `${numericRate.toFixed(1)}%`}`}
+      aria-label={`${monthLabel}下单率 ${rate === null || rate === undefined ? "暂无数据" : `${numericRate.toFixed(1)}%`}`}
     >
       <div className="quote-kpi-rate-gauge">
         <span className="quote-kpi-rate-ticks" aria-hidden="true" />
@@ -151,7 +158,13 @@ function RateMetricCard({ rate }) {
               )}
         </div>
       </div>
-      <span className="quote-kpi-rate-title">本月下单率</span>
+      <div className="quote-kpi-rate-copy">
+        <span className="quote-kpi-rate-title">
+          {monthLabel}下单率
+          <TrendingUp size={18} aria-hidden="true" />
+        </span>
+        <small>{monthLabel}报价转化率</small>
+      </div>
     </article>
   );
 }
@@ -163,7 +176,7 @@ function SectionHeading({ icon: Icon, title, description, aside }) {
         <span className="quote-report-heading-icon"><Icon size={17} /></span>
         <div>
           <h2>{title}</h2>
-          <p>{description}</p>
+          {description && <p>{description}</p>}
         </div>
       </div>
       {aside}
@@ -195,7 +208,6 @@ function OfficerOverview({
       <SectionHeading
         icon={UsersRound}
         title="报价员概览"
-        description="按报价员统计所选日期区间写入的报价清单"
       />
       <div className="quote-officer-range-filter" aria-label="报价员统计日期区间">
         <input
@@ -313,7 +325,6 @@ function RegionComparison({ items, selectedMonth, onMonthChange, loading }) {
       <SectionHeading
         icon={ChartNoAxesColumnIncreasing}
         title="区域报价与下单对比"
-        description="所选时间范围内的报价总价与已确认下单金额"
         aside={(
           <input
             className="quote-report-filter"
@@ -412,8 +423,7 @@ function BusinessRanking({ items, selectedMonth, onMonthChange, loading }) {
     >
       <SectionHeading
         icon={UsersRound}
-        title="业务员报价排名"
-        description="按所选时间范围报价总额排序，金额来自真实业务记录"
+        title="业务报价与下单对比"
         aside={(
           <input
             className="quote-report-filter"
@@ -477,6 +487,7 @@ export default function QuoteDashboardPage() {
   const currentMonth = useMemo(() => today.slice(0, 7), [today]);
   const [todayData, setTodayData] = useState(null);
   const [monthData, setMonthData] = useState(null);
+  const [summaryMonthData, setSummaryMonthData] = useState(null);
   const [officerData, setOfficerData] = useState(null);
   const [regionData, setRegionData] = useState(null);
   const [businessData, setBusinessData] = useState(null);
@@ -486,9 +497,11 @@ export default function QuoteDashboardPage() {
   });
   const [regionMonth, setRegionMonth] = useState(currentMonth);
   const [businessMonth, setBusinessMonth] = useState(currentMonth);
+  const [summaryMonth, setSummaryMonth] = useState(currentMonth);
   const [loadingSections, setLoadingSections] = useState({
     today: true,
     month: true,
+    summary: false,
     officer: false,
     region: false,
     business: false,
@@ -551,6 +564,23 @@ export default function QuoteDashboardPage() {
   }, [loadInitialDashboard]);
 
   useEffect(() => {
+    if (summaryMonth === currentMonth) {
+      setSummaryMonthData(null);
+      setLoadingSections((current) => ({ ...current, summary: false }));
+      return undefined;
+    }
+    setSummaryMonthData(null);
+    const controller = new AbortController();
+    loadSection(
+      "summary",
+      monthDateRange(summaryMonth),
+      setSummaryMonthData,
+      controller.signal,
+    );
+    return () => controller.abort();
+  }, [currentMonth, loadSection, summaryMonth]);
+
+  useEffect(() => {
     if (officerRange.startDate === today && officerRange.endDate === today) {
       setOfficerData(null);
       setLoadingSections((current) => ({ ...current, officer: false }));
@@ -601,6 +631,9 @@ export default function QuoteDashboardPage() {
   const refreshAll = useCallback(() => {
     setError("");
     loadInitialDashboard();
+    if (summaryMonth !== currentMonth) {
+      loadSection("summary", monthDateRange(summaryMonth), setSummaryMonthData);
+    }
     if (officerRange.startDate !== today || officerRange.endDate !== today) {
       loadSection("officer", officerRange, setOfficerData);
     }
@@ -617,12 +650,14 @@ export default function QuoteDashboardPage() {
     loadSection,
     officerRange,
     regionMonth,
+    summaryMonth,
     today,
   ]);
 
   const loading = Object.values(loadingSections).some(Boolean);
+  const selectedMonthData = summaryMonth === currentMonth ? monthData : summaryMonthData;
   const todayActiveData = scopedDashboard(todayData, scope);
-  const monthActiveData = scopedDashboard(monthData, scope);
+  const monthActiveData = scopedDashboard(selectedMonthData, scope);
   const officerActiveData = scopedDashboard(officerData || todayData, scope);
   const regionActiveData = scopedDashboard(regionData || monthData, scope);
   const businessActiveData = scopedDashboard(businessData || monthData, scope);
@@ -639,14 +674,21 @@ export default function QuoteDashboardPage() {
     conversionRate: null,
   };
   const checkedTime = useMemo(() => {
-    if (!monthData?.checkedAt) return "等待刷新";
+    if (!selectedMonthData?.checkedAt) return "等待刷新";
     return new Intl.DateTimeFormat("zh-CN", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
-    }).format(new Date(monthData.checkedAt));
-  }, [monthData?.checkedAt]);
+    }).format(new Date(selectedMonthData.checkedAt));
+  }, [selectedMonthData?.checkedAt]);
+  const selectedMonthLabel = formatMonthLabel(summaryMonth, currentMonth);
+  const selectedMonthRange = monthDateRange(summaryMonth);
+  const selectedMonthEndLabel = summaryMonth === currentMonth
+    ? "今日"
+    : selectedMonthRange.endDate;
+  const kpiLoading = loadingSections.today
+    || (summaryMonth === currentMonth ? loadingSections.month : loadingSections.summary);
 
   return (
     <PageTransition
@@ -675,6 +717,15 @@ export default function QuoteDashboardPage() {
               </button>
             ))}
           </div>
+          <label className="quote-dashboard-month-filter">
+            <span>指标月份</span>
+            <input
+              type="month"
+              aria-label="核心指标月份"
+              value={summaryMonth}
+              onChange={(event) => setSummaryMonth(event.target.value || currentMonth)}
+            />
+          </label>
           <small><i />{checkedTime} 更新</small>
           <button type="button" onClick={refreshAll} disabled={loading}>
             <RefreshCw className={loading ? "quote-dashboard-spin" : ""} size={15} />
@@ -692,10 +743,10 @@ export default function QuoteDashboardPage() {
 
       <section
         className={`quote-dashboard-kpis ${
-          loadingSections.today || loadingSections.month ? "is-loading" : ""
+          kpiLoading ? "is-loading" : ""
         }`.trim()}
         aria-label="报价核心指标"
-        aria-busy={loadingSections.today || loadingSections.month}
+        aria-busy={kpiLoading}
       >
         <MetricCard
           icon={ClipboardList}
@@ -706,24 +757,24 @@ export default function QuoteDashboardPage() {
         />
         <MetricCard
           icon={FileSpreadsheet}
-          label="本月报价"
+          label={`${selectedMonthLabel}报价`}
           value={`${monthSummary.fileCount} 份`}
-          note={`${currentMonth}-01 至今日`}
+          note={`${selectedMonthRange.startDate} 至 ${selectedMonthEndLabel}`}
           tone="green"
         />
         <RateMetricCard
           rate={monthSummary.conversionRate}
+          monthLabel={selectedMonthLabel}
         />
         <MetricCard
           icon={CircleDollarSign}
-          label="本月报价总额"
+          label={`${selectedMonthLabel}报价总额`}
           value={formatWan(monthSummary.quoteTotal)}
-          note="报价统计表总价汇总"
           tone="indigo"
         />
         <MetricCard
           icon={ShoppingCart}
-          label="本月下单总额"
+          label={`${selectedMonthLabel}下单总额`}
           value={formatWan(monthSummary.orderTotal)}
           note={`${monthSummary.orderCount} 条有效下单明细`}
           tone="violet"
@@ -752,17 +803,9 @@ export default function QuoteDashboardPage() {
         />
       </div>
 
-      <footer className="quote-dashboard-note">
-        <span>真实数据口径</span>
-        <p>
-          报价员卡片按所选日期区间统计；区域和业务卡片分别按各自所选月份统计。下单数据仅统计绘图清单中“是否下单=是”的记录，
-          每条下单金额统一按“数量 × 销售单价”计算。
-        </p>
-      </footer>
-
-      {(monthData?.warnings || []).length > 0 && (
+      {(selectedMonthData?.warnings || []).length > 0 && (
         <div className="quote-dashboard-warnings">
-          {monthData.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+          {selectedMonthData.warnings.map((warning) => <span key={warning}>{warning}</span>)}
         </div>
       )}
     </PageTransition>

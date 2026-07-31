@@ -42,7 +42,7 @@ test("quote preview parses but does not write, while commit writes one quote rec
     类型: "下单",
     报价日期: "2026-07-28",
     类别: "软体",
-    报价员: "胡燕琪",
+    报价员: "胡燕绮",
     区域: "华南区",
     业务: "张三",
     单价: 100,
@@ -54,7 +54,7 @@ test("quote preview parses but does not write, while commit writes one quote rec
         parseSpreadsheetBuffer: async () => [{ 销售单价: 100, 销售总价: 300 }],
         summarizeQuoteRecords: (_records, options) => {
           assert.equal(options.entryType, "下单");
-          assert.equal(options.quoteOfficer, "胡燕琪");
+          assert.equal(options.quoteOfficer, "胡燕绮");
           assert.equal(options.quoteDate, "2026-07-28");
           return { summary, sourceRowCount: 1 };
         },
@@ -72,7 +72,7 @@ test("quote preview parses but does not write, while commit writes one quote rec
   const query = {
     fileName: "报价.xlsx",
     entryType: "下单",
-    quoteOfficer: "胡燕琪",
+    quoteOfficer: "胡燕绮",
     quoteDate: "2026-07-28",
   };
   const preview = await harness.request("/api/quote-statistics/preview", { query });

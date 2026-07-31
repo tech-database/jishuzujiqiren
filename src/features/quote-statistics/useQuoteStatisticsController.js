@@ -22,7 +22,7 @@ export const quoteOfficerOptions = Object.freeze([
   { name: "杨利伟", category: "胶板" },
   { name: "邓翠萍", category: "胶板" },
   { name: "朱海韵", category: "油漆" },
-  { name: "胡燕琪", category: "软体" },
+  { name: "胡燕绮", category: "软体" },
 ]);
 
 export function assertSingleQuoteWrite(result) {

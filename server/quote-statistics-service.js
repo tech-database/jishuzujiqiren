@@ -4,7 +4,7 @@ export const quoteOfficerCategories = Object.freeze({
   杨利伟: "胶板",
   邓翠萍: "胶板",
   朱海韵: "油漆",
-  胡燕琪: "软体",
+  胡燕绮: "软体",
 });
 
 const manualEntryTypes = new Set(["报价", "下单"]);
