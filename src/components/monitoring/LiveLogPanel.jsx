@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ChevronDown,
   CheckCircle2,
   Clipboard,
   Info,
@@ -24,6 +25,11 @@ const levelLabel = {
   warning: "警告",
   error: "错误",
   debug: "调试",
+};
+
+const sourceLabel = {
+  stdout: "标准输出",
+  stderr: "错误输出",
 };
 
 function formatLogTime(value) {
@@ -57,7 +63,16 @@ function LiveLogPanelComponent({
 
   async function copyLog(log) {
     await navigator.clipboard?.writeText?.(
-      `[${formatLogTime(log.timestamp)}] ${levelLabel[log.level] || "信息"} ${log.eventLabel}：${log.messageLabel}`,
+      [
+        `时间：${formatLogTime(log.timestamp)}`,
+        `级别：${levelLabel[log.level] || "信息"}`,
+        `事件：${log.eventLabel}`,
+        `消息：${log.messageLabel}`,
+        `原始消息：${log.message || "无"}`,
+        `服务：${log.service || "未知"}`,
+        `事件标识：${log.event || "未知"}`,
+        `日志来源：${sourceLabel[log.source] || log.source || "未知"}`,
+      ].join("\n"),
     );
   }
 
@@ -144,7 +159,31 @@ function LiveLogPanelComponent({
                     </span>
                     <div className="monitoring-log-content">
                       <strong>{log.eventLabel}</strong>
-                      <p title={log.messageLabel}>{log.messageLabel}</p>
+                      <p>{log.messageLabel}</p>
+                      <details className="monitoring-log-details">
+                        <summary>
+                          <ChevronDown size={14} aria-hidden="true" />
+                          查看详细日志
+                        </summary>
+                        <dl>
+                          <div>
+                            <dt>原始消息</dt>
+                            <dd className="monitoring-log-raw-message">{log.message || "无"}</dd>
+                          </div>
+                          <div>
+                            <dt>服务</dt>
+                            <dd>{log.service || "未知"}</dd>
+                          </div>
+                          <div>
+                            <dt>事件标识</dt>
+                            <dd>{log.event || "未知"}</dd>
+                          </div>
+                          <div>
+                            <dt>日志来源</dt>
+                            <dd>{sourceLabel[log.source] || log.source || "未知"}</dd>
+                          </div>
+                        </dl>
+                      </details>
                     </div>
                     <button type="button" onClick={() => copyLog(log)} aria-label="复制这条日志">
                       <Clipboard size={15} />

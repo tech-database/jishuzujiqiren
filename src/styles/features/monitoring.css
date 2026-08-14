@@ -465,7 +465,7 @@
 .monitoring-log-row {
   display: grid;
   grid-template-columns: 164px 76px minmax(0, 1fr) 34px;
-  align-items: center;
+  align-items: start;
   gap: 10px;
   min-height: 46px;
   border: 1px solid rgba(22, 119, 255, 0.1);
@@ -528,13 +528,74 @@
 }
 
 .monitoring-log-row p {
-  overflow: hidden;
   margin: 0;
   color: var(--color-ink);
   font-size: 13px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.monitoring-log-details {
+  margin-top: 3px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.monitoring-log-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.monitoring-log-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.monitoring-log-details summary svg {
+  transition: transform 180ms ease-out;
+}
+
+.monitoring-log-details[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.monitoring-log-details dl {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 2px;
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.045);
+  padding: 10px 12px;
+}
+
+.monitoring-log-details dl > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.monitoring-log-details dt {
+  color: var(--color-subtle);
+  font-weight: 700;
+}
+
+.monitoring-log-details dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-ink);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.monitoring-log-raw-message {
+  max-height: 180px;
+  overflow: auto;
 }
 
 .monitoring-log-row button {
@@ -546,6 +607,12 @@
   border-radius: 10px;
   color: var(--color-primary);
   background: rgba(22, 119, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monitoring-log-details summary svg {
+    transition: none;
+  }
 }
 
 .monitoring-log-empty {
