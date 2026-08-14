@@ -579,70 +579,19 @@
 
 .monitoring-log-row {
   position: relative;
-  grid-template-columns: 32px minmax(0, 1fr) 34px;
-  min-height: 72px;
+  grid-template-columns: 156px 72px minmax(0, 1fr) 34px;
+  min-height: 62px;
   gap: 10px;
-  padding: 10px 8px 10px 0;
+  padding: 10px 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
-}
-
-.monitoring-log-row::before {
-  content: "";
-  position: absolute;
-  top: 43px;
-  bottom: -10px;
-  left: 15px;
-  width: 1px;
-  background: #e1e7ef;
-}
-
-.monitoring-log-row:last-child::before {
-  display: none;
-}
-
-.monitoring-log-marker {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 1px solid #cfe0ff;
-  border-radius: 50%;
-  color: #2563eb;
-  background: #eef4ff;
-}
-
-.monitoring-log-row.success .monitoring-log-marker {
-  border-color: #cdebdc;
-  color: #168252;
-  background: #edf9f3;
-}
-
-.monitoring-log-row.warning .monitoring-log-marker {
-  border-color: #f2ddb4;
-  color: #a96808;
-  background: #fff7e8;
-}
-
-.monitoring-log-row.error .monitoring-log-marker {
-  border-color: #f1c9ce;
-  color: #c43b4b;
-  background: #fff1f2;
 }
 
 .monitoring-log-content {
   display: grid;
   min-width: 0;
   gap: 4px;
-}
-
-.monitoring-log-content > div {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
 }
 
 /* Clear field hierarchy across light product surfaces */
@@ -767,7 +716,7 @@
   font-size: 12px;
 }
 
-.monitoring-log-content time {
+.monitoring-log-row > time {
   color: #98a2b3;
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 10px;
@@ -869,7 +818,6 @@
   }
 
   .monitoring-log-row {
-    grid-template-columns: 32px minmax(0, 1fr) 30px;
+    grid-template-columns: minmax(0, 1fr) 30px;
   }
 }
-

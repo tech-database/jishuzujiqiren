@@ -5,18 +5,20 @@ import { createMonitoringRoutes } from "./monitoring-routes.js";
 function createHarness(options = {}) {
   const routes = new Map();
   const app = {
-    get(path, handler) {
-      routes.set(`GET ${path}`, handler);
+    get(path, ...handlers) {
+      routes.set(`GET ${path}`, handlers);
     },
   };
   const statusSyncInfo = { running: false, lastError: "" };
   createMonitoringRoutes({
     buildHealthStatus: options.buildHealthStatus || (async () => ({ ok: true })),
     getConfigStatus: () => ({ ready: true }),
+    loadRuntimeLogs: options.loadRuntimeLogs || (async () => ({ logs: [], limit: 200 })),
+    requireAdminAccess: options.requireAdminAccess || ((_req, _res, next) => next()),
     statusSyncInfo,
   }).registerRoutes(app);
 
-  async function request(path) {
+  async function request(path, { query = {} } = {}) {
     const response = {
       body: null,
       statusCode: 200,
@@ -29,7 +31,13 @@ function createHarness(options = {}) {
         return this;
       },
     };
-    await routes.get(`GET ${path}`)({}, response);
+    const handlers = routes.get(`GET ${path}`);
+    let index = 0;
+    async function next() {
+      const handler = handlers[index++];
+      if (handler) await handler({ query }, response, next);
+    }
+    await next();
     return response;
   }
 
@@ -45,6 +53,33 @@ test("monitoring routes expose config and background sync state", async () => {
   assert.deepEqual((await request("/api/background-status-sync")).body.data, {
     status: statusSyncInfo,
   });
+});
+
+test("runtime logs require admin access and use a bounded server-side reader", async () => {
+  let readerCalls = 0;
+  const { request } = createHarness({
+    requireAdminAccess: (_req, res) => res.status(401).json({ ok: false }),
+    loadRuntimeLogs: async () => {
+      readerCalls += 1;
+      return { logs: [] };
+    },
+  });
+  const denied = await request("/api/admin/runtime-logs", { query: { limit: "999" } });
+  assert.equal(denied.statusCode, 401);
+  assert.equal(readerCalls, 0);
+
+  let receivedLimit;
+  const allowedHarness = createHarness({
+    loadRuntimeLogs: async ({ limit }) => {
+      receivedLimit = limit;
+      return { logs: [{ id: "log-1" }], limit: 200 };
+    },
+  });
+  const allowed = await allowedHarness.request("/api/admin/runtime-logs", {
+    query: { limit: "200" },
+  });
+  assert.equal(receivedLimit, "200");
+  assert.deepEqual(allowed.body.data.logs, [{ id: "log-1" }]);
 });
 
 test("health route uses 503 for a completed unhealthy check", async () => {

@@ -100,6 +100,7 @@ export function AppPages({ activeTab, adminAuthenticated, controllers }) {
       {activeTab === "status" && (
         <React.Suspense fallback={<PanelSkeleton className="monitoring-loading-shell card" />}>
           <MonitoringCenter
+            adminAuthenticated={adminAuthenticated}
             configReady={config.configReady}
             controller={monitoring}
             healthLoading={config.healthLoading}

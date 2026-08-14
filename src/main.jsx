@@ -42,6 +42,7 @@ function App() {
   const quoteStatisticsController = useQuoteStatisticsController();
   const monitoringController = useMonitoringController({
     activeTab: sessionController.activeTab,
+    adminAuthenticated: sessionController.adminAuthenticated,
     configReady,
     resetVersion: configController.monitoringResetVersion,
     targetTable,

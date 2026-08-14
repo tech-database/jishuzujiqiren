@@ -21,6 +21,7 @@
     "verify:full": "npm run verify && npm run test:e2e",
     "pregit:publish": "npm run verify",
     "git:publish": "node scripts/publish-git.mjs",
+    "deploy:server": "bash scripts/deploy-server.sh",
     "server": "node server/index.js",
     "feishu:ws": "node server/long-connection.js",
     "start": "node server/index.js",

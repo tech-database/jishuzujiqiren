@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getDrawingOwnerStats } from "../drawing/drawing.api.js";
 import {
   getBackgroundSyncStatus,
+  getRuntimeLogs,
   recalculateDrawingDurations as recalculateDrawingDurationsApi,
   syncDrawingStatuses,
 } from "./monitoring.api.js";
@@ -14,7 +15,13 @@ import {
   statusTableKeys,
 } from "./status.utils.js";
 
-export function useMonitoringController({ activeTab, configReady, resetVersion = 0, targetTable }) {
+export function useMonitoringController({
+  activeTab,
+  adminAuthenticated,
+  configReady,
+  resetVersion = 0,
+  targetTable,
+}) {
   const [statusActionRunning, setStatusActionRunning] = useState(false);
   const [statusState, setStatusState] = useState(null);
   const [statusResultsByKey, setStatusResultsByKey] = useState({});
@@ -26,6 +33,10 @@ export function useMonitoringController({ activeTab, configReady, resetVersion =
   const [ownerStats, setOwnerStats] = useState(null);
   const [ownerStatsLoading, setOwnerStatsLoading] = useState(false);
   const [ownerStatsState, setOwnerStatsState] = useState(null);
+  const [runtimeLogs, setRuntimeLogs] = useState([]);
+  const [runtimeLogsError, setRuntimeLogsError] = useState("");
+  const [runtimeLogsLoading, setRuntimeLogsLoading] = useState(false);
+  const [runtimeLogsUpdatedAt, setRuntimeLogsUpdatedAt] = useState("");
   const [statusDateRange, setStatusDateRange] = useState(() => {
     const today = new Date();
     return {
@@ -55,6 +66,10 @@ export function useMonitoringController({ activeTab, configReady, resetVersion =
     setBackgroundSyncStatus(null);
     setOwnerStats(null);
     setOwnerStatsState(null);
+    setRuntimeLogs([]);
+    setRuntimeLogsError("");
+    setRuntimeLogsLoading(false);
+    setRuntimeLogsUpdatedAt("");
   }
 
   async function fetchTableStatus(tableKey, range, { force = false } = {}) {
@@ -165,6 +180,21 @@ export function useMonitoringController({ activeTab, configReady, resetVersion =
     }
   }
 
+  const loadRuntimeLogEntries = useCallback(async ({ silent = false } = {}) => {
+    if (!adminAuthenticated) return;
+    if (!silent) setRuntimeLogsLoading(true);
+    try {
+      const data = await getRuntimeLogs(200);
+      setRuntimeLogs(Array.isArray(data.logs) ? data.logs : []);
+      setRuntimeLogsUpdatedAt(data.generatedAt || new Date().toISOString());
+      setRuntimeLogsError("");
+    } catch (error) {
+      setRuntimeLogsError(error.message || "机器人日志读取失败");
+    } finally {
+      if (!silent) setRuntimeLogsLoading(false);
+    }
+  }, [adminAuthenticated]);
+
   useEffect(() => {
     if (activeTab !== "status" || !configReady) return;
     syncDrawingStatus({ silent: true, force: false });
@@ -190,6 +220,23 @@ export function useMonitoringController({ activeTab, configReady, resetVersion =
     return () => window.clearInterval(timer);
   }, [activeTab, configReady]);
 
+  useEffect(() => {
+    if (activeTab !== "status" || !adminAuthenticated) {
+      if (!adminAuthenticated) {
+        setRuntimeLogs([]);
+        setRuntimeLogsError("");
+        setRuntimeLogsUpdatedAt("");
+      }
+      return undefined;
+    }
+    loadRuntimeLogEntries();
+    const timer = window.setInterval(
+      () => loadRuntimeLogEntries({ silent: true }),
+      5000,
+    );
+    return () => window.clearInterval(timer);
+  }, [activeTab, adminAuthenticated, loadRuntimeLogEntries]);
+
   return {
     aggregateStatusResult,
     backgroundSyncStatus,
@@ -200,6 +247,11 @@ export function useMonitoringController({ activeTab, configReady, resetVersion =
     ownerStatsState,
     recalculateDrawingDurations,
     resetMonitoring,
+    runtimeLogs,
+    runtimeLogsError,
+    runtimeLogsLoading,
+    runtimeLogsUpdatedAt,
+    loadRuntimeLogEntries,
     setStatusDateRange,
     statusDateRange,
     statusResult,

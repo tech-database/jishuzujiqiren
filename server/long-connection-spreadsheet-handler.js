@@ -1,5 +1,6 @@
 import { chatKey } from "./long-connection-message.js";
 import { pollPendingSpreadsheetSessions } from "./spreadsheet-session-polling.js";
+import { chineseBotErrorMessage } from "./bot-reply-language.js";
 
 export function createLongConnectionSpreadsheetHandler({
   createBitableRecords,
@@ -75,14 +76,28 @@ export function createLongConnectionSpreadsheetHandler({
   }
 
   async function handleCompletion(message, pending) {
-    const outcome = await processing.runCompletion(message, () =>
-      processCompletion(message, pending),
-    );
-    if (outcome.skipped) {
-      logger.info?.("spreadsheet_completion_skipped", {
+    try {
+      const outcome = await processing.runCompletion(message, () =>
+        processCompletion(message, pending),
+      );
+      if (outcome.skipped) {
+        logger.info?.("spreadsheet_completion_skipped", {
+          chat: chatKey(message),
+          messageId: message.messageId,
+        });
+      }
+      return outcome;
+    } catch (error) {
+      logger.error?.("spreadsheet_completion_failed", {
         chat: chatKey(message),
         messageId: message.messageId,
+        error,
       });
+      await sendReply(
+        message.chatId,
+        `表格处理失败：${chineseBotErrorMessage(error)}`,
+      );
+      return { skipped: false, status: "failed", error };
     }
   }
 

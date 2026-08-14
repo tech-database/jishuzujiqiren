@@ -3,6 +3,8 @@ import { apiErrorCodes, sendError, successResponse } from "./api-response.js";
 export function createMonitoringRoutes({
   buildHealthStatus,
   getConfigStatus,
+  loadRuntimeLogs,
+  requireAdminAccess,
   statusSyncInfo,
 } = {}) {
   function registerRoutes(app) {
@@ -23,6 +25,20 @@ export function createMonitoringRoutes({
 
     app.get("/api/background-status-sync", (_req, res) => {
       res.json(successResponse({ status: statusSyncInfo }));
+    });
+
+    app.get("/api/admin/runtime-logs", requireAdminAccess, async (req, res) => {
+      try {
+        const result = await loadRuntimeLogs({ limit: req.query?.limit });
+        res.json(successResponse(result));
+      } catch (error) {
+        sendError(
+          res,
+          new Error("机器人日志读取失败，请检查服务器日志文件权限。", { cause: error }),
+          apiErrorCodes.RUNTIME_LOGS_FAILED,
+          500,
+        );
+      }
     });
   }
 

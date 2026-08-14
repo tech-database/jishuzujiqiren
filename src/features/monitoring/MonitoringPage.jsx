@@ -1,6 +1,7 @@
 import MonitoringCenter from "../../components/monitoring/MonitoringCenter.jsx";
 
 export default function MonitoringPage({
+  adminAuthenticated,
   configReady,
   controller: c,
   healthLoading,
@@ -10,6 +11,7 @@ export default function MonitoringPage({
 }) {
   return (
     <MonitoringCenter
+      adminAuthenticated={adminAuthenticated}
       configReady={configReady}
       targetTable={targetTable}
       setTargetTable={setTargetTable}
@@ -24,6 +26,11 @@ export default function MonitoringPage({
       syncDrawingStatus={c.syncDrawingStatus}
       recalculateDrawingDurations={c.recalculateDrawingDurations}
       formatDisplayTime={c.formatDisplayTime}
+      loadRuntimeLogs={c.loadRuntimeLogEntries}
+      runtimeLogs={c.runtimeLogs}
+      runtimeLogsError={c.runtimeLogsError}
+      runtimeLogsLoading={c.runtimeLogsLoading}
+      runtimeLogsUpdatedAt={c.runtimeLogsUpdatedAt}
     />
   );
 }

@@ -2,7 +2,6 @@ import {
   buildMetricCards,
   buildStatusDistribution,
   calculateCompletionRate,
-  normalizeLogEntries,
   normalizeStatusData,
 } from "../../utils/monitoringDataTransform.js";
 
@@ -13,7 +12,6 @@ export function buildMonitoringViewModel({
   healthLoading,
   healthStatus,
   statusResult,
-  statusState,
   targetTable,
 }) {
   const normalized = normalizeStatusData(statusResult, null);
@@ -70,13 +68,6 @@ export function buildMonitoringViewModel({
     lastCheckedLabel: backgroundSyncStatus?.lastCheckedAt
       ? formatDisplayTime(backgroundSyncStatus.lastCheckedAt)
       : "等待首次检测",
-    logs: normalizeLogEntries({
-      backgroundSyncStatus,
-      healthStatus,
-      statusResult,
-      statusState,
-      formatDisplayTime,
-    }),
     metrics: buildMetricCards(normalized, backgroundSyncStatus).filter(
       (metric) => metric.key !== "lastCheckedAt",
     ),

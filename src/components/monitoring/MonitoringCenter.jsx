@@ -8,6 +8,7 @@ import { MonitoringInsight } from "./MonitoringInsight.jsx";
 import { MonitoringOverview } from "./MonitoringOverview.jsx";
 
 export default function MonitoringCenter({
+  adminAuthenticated,
   configReady,
   targetTable,
   setTargetTable,
@@ -22,6 +23,11 @@ export default function MonitoringCenter({
   syncDrawingStatus,
   recalculateDrawingDurations,
   formatDisplayTime,
+  loadRuntimeLogs,
+  runtimeLogs,
+  runtimeLogsError,
+  runtimeLogsLoading,
+  runtimeLogsUpdatedAt,
 }) {
   const view = useMemo(
     () =>
@@ -32,7 +38,6 @@ export default function MonitoringCenter({
         healthLoading,
         healthStatus,
         statusResult,
-        statusState,
         targetTable,
       }),
     [
@@ -42,7 +47,6 @@ export default function MonitoringCenter({
       healthLoading,
       healthStatus,
       statusResult,
-      statusState,
       targetTable,
     ],
   );
@@ -96,8 +100,12 @@ export default function MonitoringCenter({
       />
 
       <LiveLogPanel
-        logs={view.logs}
-        loading={statusSyncing && view.logs.length === 0}
+        authenticated={adminAuthenticated}
+        error={runtimeLogsError}
+        lastUpdated={runtimeLogsUpdatedAt}
+        loading={runtimeLogsLoading}
+        logs={runtimeLogs}
+        onRefresh={() => loadRuntimeLogs()}
       />
     </motion.section>
   );

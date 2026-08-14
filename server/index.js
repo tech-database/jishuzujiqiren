@@ -11,6 +11,7 @@ import { createHealthService } from "./health-service.js";
 import { createHomeDashboardRoutes } from "./home-dashboard-routes.js";
 import { createImportRoutes } from "./import-routes.js";
 import { createMonitoringRoutes } from "./monitoring-routes.js";
+import { loadRuntimeLogs } from "./runtime-log-reader.js";
 import { createQuoteDashboardRoutes } from "./quote-dashboard-routes.js";
 import { createQuoteStatisticsRoutes } from "./quote-statistics-routes.js";
 import { createStatusSyncService } from "./status-sync-service.js";
@@ -59,6 +60,8 @@ const { buildHealthStatus } = createHealthService({ websocketStatusPath });
 const { registerRoutes: registerMonitoringRoutes } = createMonitoringRoutes({
   buildHealthStatus,
   getConfigStatus,
+  loadRuntimeLogs,
+  requireAdminAccess,
   statusSyncInfo,
 });
 const { registerRoutes: registerHomeDashboardRoutes } = createHomeDashboardRoutes({

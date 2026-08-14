@@ -11,3 +11,7 @@ export function recalculateDrawingDurations(payload) {
 export function getBackgroundSyncStatus() {
   return getJson("/api/background-status-sync");
 }
+
+export function getRuntimeLogs(limit = 200) {
+  return getJson(`/api/admin/runtime-logs?limit=${encodeURIComponent(limit)}`);
+}

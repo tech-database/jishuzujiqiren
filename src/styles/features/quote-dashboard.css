@@ -36,8 +36,7 @@
 .quote-dashboard-title h1,
 .quote-dashboard-title p,
 .quote-report-heading h2,
-.quote-report-heading p,
-.quote-dashboard-note p {
+.quote-report-heading p {
   margin: 0;
 }
 
@@ -195,7 +194,6 @@
 
 .quote-kpi,
 .quote-report-panel,
-.quote-dashboard-note,
 .quote-dashboard-error,
 .quote-dashboard-warnings {
   border: 1px solid #dbe5f2;
@@ -771,29 +769,6 @@
   place-items: center;
   color: #667790;
   font-size: 11px;
-}
-
-.quote-dashboard-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 13px;
-}
-
-.quote-dashboard-note span {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  color: #175ebf;
-  background: #edf4ff;
-  padding: 4px 8px;
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.quote-dashboard-note p {
-  color: #52657e;
-  font-size: 10px;
-  line-height: 1.55;
 }
 
 .quote-dashboard-error,
@@ -1461,12 +1436,6 @@
   font-size: 12px;
 }
 
-.quote-home-active .quote-region-table tbody th,
-.quote-home-active .quote-region-table tbody td,
-.quote-home-active .quote-region-rate > strong {
-  font-size: 14px;
-}
-
 .quote-home-active .quote-rank {
   min-width: 24px;
   height: 24px;
@@ -1475,28 +1444,6 @@
 
 .quote-home-active .quote-rate small {
   font-size: 10px;
-}
-
-.quote-home-active .quote-dashboard-note {
-  min-height: 0;
-  border-color: rgba(52, 137, 235, 0.3);
-  border-radius: 0;
-  padding: 6px 11px;
-  background: rgba(248, 252, 255, 0.72);
-  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
-}
-
-.quote-home-active .quote-dashboard-note span {
-  border-radius: 5px;
-  color: #0f62b9;
-  background: #e7f3ff;
-}
-
-.quote-home-active .quote-dashboard-note p {
-  overflow: hidden;
-  color: #54749e;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 1450px) {

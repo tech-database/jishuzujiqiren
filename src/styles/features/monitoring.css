@@ -391,6 +391,70 @@
   margin-bottom: 12px;
 }
 
+.runtime-log-head {
+  align-items: flex-start;
+}
+
+.runtime-log-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.runtime-log-status > span {
+  color: var(--color-subtle);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.monitoring-log-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 92px;
+  border: 1px dashed rgba(22, 119, 255, 0.2);
+  border-radius: 14px;
+  color: var(--color-primary);
+  background: rgba(22, 119, 255, 0.05);
+  padding: 18px;
+}
+
+.monitoring-log-gate div {
+  display: grid;
+  gap: 5px;
+}
+
+.monitoring-log-gate strong {
+  color: var(--color-ink);
+  font-size: 14px;
+}
+
+.monitoring-log-gate p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.runtime-log-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.08);
+  padding: 11px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.runtime-log-refreshing {
+  animation: spin 0.8s linear infinite;
+}
+
 .monitoring-log-list {
   display: grid;
   gap: 9px;
@@ -400,7 +464,7 @@
 
 .monitoring-log-row {
   display: grid;
-  grid-template-columns: 108px 86px minmax(0, 1fr) 34px;
+  grid-template-columns: 164px 76px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 10px;
   min-height: 46px;
@@ -408,6 +472,29 @@
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.54);
   padding: 9px 10px;
+}
+
+.monitoring-log-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.monitoring-log-content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.monitoring-log-content strong {
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .monitoring-log-row.error {
@@ -537,9 +624,27 @@
 
 @media (max-width: 760px) {
   .monitoring-metric-grid,
-  .log-tools,
-  .monitoring-log-row {
+  .log-tools {
     grid-template-columns: 1fr;
+  }
+
+  .monitoring-log-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .monitoring-log-row time,
+  .monitoring-log-level,
+  .monitoring-log-content {
+    grid-column: 1;
+  }
+
+  .monitoring-log-row button {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  .runtime-log-status {
+    justify-content: flex-start;
   }
 
   .monitoring-control-actions,
@@ -564,5 +669,8 @@
   .completion-kpi-track span {
     animation: none !important;
   }
-}
 
+  .runtime-log-refreshing {
+    animation: none !important;
+  }
+}
