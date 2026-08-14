@@ -46,6 +46,14 @@ function fallbackMessage(level) {
 function translateRuntimeMessage(message, level) {
   const original = String(message || "").trim();
   if (!original) return fallbackMessage(level);
+
+  const embeddedChineseError = original
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => line.match(/^(?:Error|错误)\s*[:：]\s*(.+)$/i)?.[1] || "")
+    .find((line) => /\p{Script=Han}/u.test(line));
+  if (embeddedChineseError) return embeddedChineseError;
+
   const exact = exactMessageTranslations.get(original.toLowerCase());
   if (exact) return exact;
 

@@ -43,6 +43,41 @@ function parseTimestampPrefix(line) {
   };
 }
 
+function combineMultilineLogLines(text) {
+  const combined = [];
+  let pending = null;
+
+  function flushPending() {
+    if (!pending) return;
+    combined.push(pending.lines.join("\n"));
+    pending = null;
+  }
+
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const parsed = parseTimestampPrefix(rawLine);
+    if (!pending) {
+      if (/^\[(?:error|warn|warning|info|debug)\]\s*:\s*\[$/i.test(parsed.line.trim())) {
+        pending = { timestamp: parsed.timestamp, lines: [rawLine] };
+      } else {
+        combined.push(rawLine);
+      }
+      continue;
+    }
+
+    if (parsed.timestamp && pending.timestamp && parsed.timestamp !== pending.timestamp) {
+      flushPending();
+      combined.push(rawLine);
+      continue;
+    }
+
+    pending.lines.push(parsed.line);
+    if (/^\]\s*$/.test(parsed.line.trim())) flushPending();
+  }
+
+  flushPending();
+  return combined;
+}
+
 function inferLevel(value, source) {
   const text = String(value || "");
   if (source === "stderr" || /\b(error|failed|failure|exception|fatal)\b/i.test(text)) return "error";
@@ -127,7 +162,7 @@ export async function loadRuntimeLogs({
   const logs = [];
   for (const [source, filePath] of sources) {
     const text = await readTail(filePath);
-    for (const line of text.split(/\r?\n/)) {
+    for (const line of combineMultilineLogLines(text)) {
       const parsed = parseLogLine(line, source);
       if (parsed) logs.push(parsed);
     }
@@ -144,4 +179,4 @@ export async function loadRuntimeLogs({
   };
 }
 
-export { parseLogLine, redactSensitiveText };
+export { combineMultilineLogLines, parseLogLine, redactSensitiveText };

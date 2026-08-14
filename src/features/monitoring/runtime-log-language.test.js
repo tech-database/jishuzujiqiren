@@ -26,3 +26,15 @@ test("keeps existing Chinese business errors unchanged", () => {
     "表格列数过多（16375 列），最多允许 500 列。",
   );
 });
+
+test("extracts the Chinese business error from an SDK multiline message", () => {
+  assert.equal(
+    translateRuntimeMessage([
+      "[error]: [",
+      "Error: 表格检测到 16375 列，系统最多允许 500 列。",
+      "at assertSpreadsheetDimensions (spreadsheet-parser.js:221:11)",
+      "]",
+    ].join("\n"), "error"),
+    "表格检测到 16375 列，系统最多允许 500 列。",
+  );
+});

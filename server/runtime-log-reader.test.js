@@ -3,11 +3,27 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  combineMultilineLogLines,
   defaultRuntimeLogPaths,
   loadRuntimeLogs,
   parseLogLine,
   redactSensitiveText,
 } from "./runtime-log-reader.js";
+
+test("combines an SDK multiline error into one runtime log", () => {
+  const lines = combineMultilineLogLines([
+    "2026-08-14T16:52:52.000Z: [error]: [",
+    "2026-08-14T16:52:52.000Z: Error: 表格检测到 16375 列，系统最多允许 500 列。",
+    "2026-08-14T16:52:52.000Z:     at assertSpreadsheetDimensions (spreadsheet-parser.js:221:11)",
+    "2026-08-14T16:52:52.000Z: ]",
+  ].join("\n"));
+
+  assert.equal(lines.length, 1);
+  const entry = parseLogLine(lines[0], "stdout");
+  assert.equal(entry.level, "error");
+  assert.match(entry.message, /表格检测到 16375 列/);
+  assert.match(entry.message, /assertSpreadsheetDimensions/);
+});
 
 test("parses structured PM2 runtime logs and preserves the business error", () => {
   const entry = parseLogLine(
