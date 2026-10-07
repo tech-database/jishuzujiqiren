@@ -495,13 +495,20 @@
 
 .quote-file-queue-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 320px) auto auto;
   align-items: center;
   gap: 9px;
   min-height: 36px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
   padding: 5px 7px 5px 9px;
+}
+
+.quote-file-error {
+  overflow: hidden;
+  color: var(--color-danger) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quote-file-queue-item > svg {

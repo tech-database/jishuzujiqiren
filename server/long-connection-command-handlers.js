@@ -7,7 +7,6 @@ import {
 export function createLongConnectionCommandHandlers({
   claimDrawingOwners,
   completeDrawings,
-  confirmDrawingOrders,
   extractMaterialCodes,
   queryUnclaimedDrawings,
   sendReply,
@@ -42,23 +41,6 @@ export function createLongConnectionCommandHandlers({
     await sendReply(
       message.chatId,
       `绘图完成已同步：${codes}，匹配 ${result.length} 条，更新 ${updatedCount} 条${unchangedText}。`,
-    );
-  }
-
-  async function orderConfirmation(message) {
-    const materialCodes = extractMaterialCodes(message.content);
-    const { result, missing } = await confirmDrawingOrders({
-      materialCodes,
-      tableKey: optionalCommandTableKey(message.content),
-    });
-    const updatedCount = result.filter((item) => item.changed).length;
-    const unchangedCount = result.length - updatedCount;
-    const codes = [...new Set(result.map((item) => item.materialCode))].join("，");
-    const unchangedText = unchangedCount > 0 ? `，其中 ${unchangedCount} 条原本已确认` : "";
-    const missingText = missing.length > 0 ? `；未找到：${missing.join("，")}` : "";
-    await sendReply(
-      message.chatId,
-      `下单确认完成：${codes}，匹配 ${result.length} 条，更新 ${updatedCount} 条${unchangedText}${missingText}。`,
     );
   }
 
@@ -101,7 +83,6 @@ export function createLongConnectionCommandHandlers({
     drawClaim,
     drawingComplete,
     getId,
-    orderConfirmation,
     statusSync,
     unclaimedQuery,
   };

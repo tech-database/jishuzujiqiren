@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  buildBusinessRegionMap,
   buildFieldMap,
   buildNameIdMap,
   emptyConfig,
   invertFieldMap,
+  mapToBusinessRegionRows,
   mapToNameIdRows,
 } from "./config.model.js";
 import {
@@ -28,6 +30,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
   const [bitableFields, setBitableFields] = useState([]);
   const [fieldMappings, setFieldMappings] = useState({});
   const [nameIdRows, setNameIdRows] = useState([{ id: "", name: "" }]);
+  const [businessRegionRows, setBusinessRegionRows] = useState([]);
   const [healthStatus, setHealthStatus] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [monitoringResetVersion, setMonitoringResetVersion] = useState(0);
@@ -60,6 +63,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
         ? data.config.nameIdMap
         : data.status?.nameIdMap;
       setNameIdRows(mapToNameIdRows(loadedNameIdMap));
+      setBusinessRegionRows(mapToBusinessRegionRows(data.config?.businessRegionMap));
       if (data.status?.ready && adminAccess) await autoFetchFields(data.status);
     } catch {
       setStatus(null);
@@ -85,6 +89,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
     setConfigBaseline(emptyConfig);
     setBitableFields([]);
     setFieldMappings({});
+    setBusinessRegionRows([]);
   }
 
   function setAdminAccess(authenticated) {
@@ -108,6 +113,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
       ...config,
       fieldMap: buildFieldMap(fieldMappings),
       nameIdMap: buildNameIdMap(nameIdRows),
+      businessRegionMap: buildBusinessRegionMap(businessRegionRows),
       adminPassword,
     };
     setSaving(true);
@@ -120,6 +126,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
       setConfig(savedConfig);
       setConfigBaseline(savedConfig);
       setNameIdRows(mapToNameIdRows(data.config?.nameIdMap));
+      setBusinessRegionRows(mapToBusinessRegionRows(data.config?.businessRegionMap));
       setSaveState({ ok: true, text: "配置已保存" });
       return true;
     } catch (error) {
@@ -186,6 +193,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
 
   return {
     bitableFields,
+    businessRegionRows,
     checkConnection,
     checking,
     checkState,
@@ -211,6 +219,7 @@ export function useConfigController({ requestSensitiveAction, targetTable }) {
     savingConfig: saving && !checking,
     setFieldMappings,
     setAdminAccess,
+    setBusinessRegionRows,
     setNameIdRows,
     setSaveState,
     status,

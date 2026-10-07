@@ -12,7 +12,6 @@ function setup() {
       return callback();
     },
     drawingComplete: async () => calls.push("drawing-complete-handler"),
-    orderConfirmation: async () => calls.push("order-handler"),
     unclaimedQuery: async () => calls.push("unclaimed"),
     statusSync: async () => calls.push("status"),
     drawClaim: async () => calls.push("claim"),
@@ -52,4 +51,15 @@ test("dispatcher routes a mentioned drawing claim through idempotency", async ()
     messageId: "m2",
   });
   assert.deepEqual(calls, ["draw-claim", "claim"]);
+});
+
+test("dispatcher ignores the removed Feishu order-confirmation command", async () => {
+  const { calls, dispatch } = setup();
+  await dispatch({
+    chatId: "c1",
+    content: "@机器人 A-001 下单确认",
+    mentionedBot: true,
+    messageId: "m3",
+  });
+  assert.deepEqual(calls, []);
 });

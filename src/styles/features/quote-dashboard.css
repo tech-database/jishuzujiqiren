@@ -909,7 +909,7 @@
 }
 
 .quote-home-active .app-main {
-  background: linear-gradient(125deg, #e7f3ff 0%, #d8ebff 42%, #edf8ff 70%, #d7eaff 100%);
+  background: #f4f6f9;
 }
 
 .quote-home-active .app-shell {
@@ -935,25 +935,16 @@
   box-sizing: border-box;
   margin: 10px 14px 14px;
   overflow: hidden;
-  border: 1px solid #168aff;
+  border: 0;
   padding: 0 10px 10px;
-  color: #092b74;
-  background:
-    radial-gradient(circle at 50% 0, rgba(255, 255, 255, 0.98) 0 20%, rgba(231, 246, 255, 0.92) 52%, rgba(211, 235, 255, 0.97) 100%);
-  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.34), inset 0 0 30px rgba(0, 126, 255, 0.12);
+  color: #10233f;
+  background: #f4f6f9;
+  box-shadow: none;
   font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
 }
 
 .quote-home-active .quote-dashboard-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(29, 157, 255, 0.13), transparent 27%),
-    radial-gradient(circle at 82% 72%, rgba(79, 91, 245, 0.09), transparent 30%),
-    radial-gradient(circle at 52% 48%, rgba(38, 213, 230, 0.08), transparent 32%);
+  content: none;
 }
 
 .quote-home-active .quote-dashboard-header {
@@ -962,7 +953,7 @@
   justify-content: center;
   border-radius: 0;
   padding: 0 8px;
-  color: #092b74;
+  color: #10233f;
   background: transparent;
   box-shadow: none;
 }
@@ -992,7 +983,7 @@
 }
 
 .quote-home-active .quote-dashboard-title h1 {
-  color: #062d8b;
+  color: #0b1836;
   font-size: 32px;
   line-height: 1;
   letter-spacing: 3px;
@@ -1015,10 +1006,10 @@
 .quote-home-active .quote-dashboard-header-actions > small,
 .quote-home-active .quote-dashboard-header-actions > button {
   min-height: 29px;
-  border-color: rgba(40, 126, 220, 0.38);
+  border-color: #d9e2ee;
   border-radius: 6px;
-  color: #1359aa;
-  background: rgba(240, 249, 255, 0.86);
+  color: #315174;
+  background: #fff;
   padding-inline: 8px;
   font-size: 10px;
 }
@@ -1026,10 +1017,10 @@
 .quote-home-active .quote-dashboard-month-filter {
   min-height: 29px;
   gap: 5px;
-  border-color: rgba(40, 126, 220, 0.38);
+  border-color: #d9e2ee;
   border-radius: 6px;
-  color: #1359aa;
-  background: rgba(240, 249, 255, 0.86);
+  color: #315174;
+  background: #fff;
   padding-inline: 7px;
   font-size: 10px;
 }
@@ -1045,9 +1036,9 @@
 }
 
 .quote-home-active .quote-dashboard-header-scope {
-  border-color: rgba(40, 126, 220, 0.34);
+  border-color: #d9e2ee;
   border-radius: 6px;
-  background: rgba(233, 245, 255, 0.82);
+  background: #f5f8fc;
   padding: 2px;
 }
 
@@ -1055,7 +1046,7 @@
   min-width: 45px;
   min-height: 25px;
   border-radius: 4px;
-  color: #376392;
+  color: #52677f;
   padding-inline: 8px;
 }
 
@@ -1079,11 +1070,11 @@
   min-height: 0;
   gap: 10px;
   overflow: hidden;
-  border-color: rgba(46, 137, 250, 0.38);
+  border-color: #e1e7ef;
   border-radius: 0;
   padding: 10px 13px;
-  background: linear-gradient(115deg, rgba(255, 255, 255, 0.9), rgba(239, 249, 255, 0.66));
-  box-shadow: inset 0 0 14px rgba(78, 174, 255, 0.07);
+  background: #fff;
+  box-shadow: 0 4px 8px rgba(20, 43, 75, 0.06);
   clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
 }
 
@@ -1116,19 +1107,19 @@
 }
 
 .quote-home-active .quote-kpi-content > span {
-  color: #183d7e;
+  color: #334a68;
   font-size: 13px;
   font-weight: 750;
 }
 
 .quote-home-active .quote-kpi-content strong {
-  color: #0b286e;
+  color: #0b1836;
   font-size: 26px;
   letter-spacing: 0;
 }
 
 .quote-home-active .quote-kpi-content small {
-  color: #5f7da4;
+  color: #718096;
   font-size: 10px;
 }
 
@@ -1162,7 +1153,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #183d7e;
+  color: #334a68;
   font-size: 17px;
   font-weight: 800;
   white-space: nowrap;
@@ -1183,7 +1174,7 @@
 }
 
 .quote-kpi-rate-copy small {
-  color: #5f7da4;
+  color: #718096;
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
@@ -1251,7 +1242,7 @@
 
 .quote-kpi-rate-number > strong {
   overflow: visible;
-  color: #0b286e;
+  color: #0b1836;
   font-size: 24px;
   letter-spacing: -0.02em;
 }
@@ -1275,9 +1266,10 @@
   position: relative;
   height: auto;
   min-height: 0;
-  border-color: rgba(52, 137, 235, 0.35);
+  border-color: #e1e7ef;
   border-radius: 0;
-  background: rgba(248, 252, 255, 0.76);
+  background: #fff;
+  box-shadow: 0 4px 8px rgba(20, 43, 75, 0.06);
   clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
 }
 
@@ -1340,7 +1332,7 @@
 
 .quote-home-active .quote-report-heading {
   min-height: 48px;
-  border-bottom-color: rgba(60, 141, 229, 0.18);
+  border-bottom-color: #e7ecf2;
   padding: 6px 12px;
 }
 
@@ -1349,24 +1341,24 @@
   height: 30px;
   border-radius: 7px;
   color: #1687df;
-  background: #e9f4ff;
+  background: #eef5ff;
 }
 
 .quote-home-active .quote-report-heading h2 {
-  color: #0b54c9;
+  color: #10233f;
   font-size: 19px;
 }
 
 .quote-home-active .quote-report-heading p {
-  color: #60789e;
+  color: #7a8ba1;
   font-size: 11px;
 }
 
 .quote-home-active .quote-report-filter {
   min-height: 28px;
-  border-color: rgba(40, 126, 220, 0.42);
+  border-color: #d9e2ee;
   border-radius: 6px;
-  color: #173d78;
+  color: #315174;
   background: rgba(255, 255, 255, 0.82);
   font-size: 11px;
 }
@@ -1377,36 +1369,36 @@
 }
 
 .quote-home-active .quote-officer-range-filter {
-  border-bottom-color: rgba(60, 141, 229, 0.15);
-  background: rgba(239, 249, 255, 0.46);
+  border-bottom-color: #e7ecf2;
+  background: #fafbfd;
   padding-block: 6px;
 }
 
 .quote-home-active .quote-report-table {
-  color: #173a76;
+  color: #243b5a;
   font-size: 13px;
 }
 
 .quote-home-active .quote-report-table th,
 .quote-home-active .quote-report-table td {
   height: 43px;
-  border-bottom-color: rgba(51, 120, 202, 0.12);
+  border-bottom-color: #e8edf3;
   padding-block: 7px;
 }
 
 .quote-home-active .quote-report-table th {
-  color: #54709c;
-  background: rgba(235, 246, 255, 0.9);
+  color: #64748b;
+  background: #f7f9fc;
   font-size: 12px;
 }
 
 .quote-home-active .quote-report-table tbody tr:hover {
-  background: rgba(225, 242, 255, 0.64);
+  background: #f4f8fd;
 }
 
 .quote-home-active .quote-officer-card {
-  border-color: rgba(52, 137, 235, 0.3);
-  background: rgba(249, 253, 255, 0.82);
+  border-color: #e1e7ef;
+  background: #fff;
 }
 
 .quote-home-active .quote-officer-card-heading > strong {

@@ -565,7 +565,6 @@ dt,
 .command-readonly-note,
 .drawing-boundary-note,
 .people-boundary-note,
-.assignment-submit-state,
 .import-target-row {
   border-color: #e1e8f2;
   color: var(--text-primary);
@@ -946,11 +945,7 @@ button:disabled {
 
 .import-file-card,
 .drawing-task-row,
-.assignment-code-list,
-.assignment-query-list article,
-.assignment-summary-metrics span,
-.assignment-code-list li,
-.assignment-code-empty {
+.assignment-query-list article {
   border-color: #e0e7f0;
   color: var(--text-primary);
   background: #f8fafd;

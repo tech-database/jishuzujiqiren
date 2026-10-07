@@ -1,7 +1,6 @@
 import {
   claimDrawingOwners,
   completeDrawings,
-  confirmDrawingOrders,
   extractMaterialCodes,
   queryDrawingAnalytics,
   queryDrawingClaimStatus,
@@ -25,7 +24,6 @@ export function createDrawingRoutes({
 } = {}) {
   const claimOwners = services.claimDrawingOwners || claimDrawingOwners;
   const completeDrawingRecords = services.completeDrawings || completeDrawings;
-  const confirmOrders = services.confirmDrawingOrders || confirmDrawingOrders;
   const loadDrawingAnalytics = services.queryDrawingAnalytics || queryDrawingAnalytics;
   const loadDrawingClaimStatus =
     services.queryDrawingClaimStatus || queryDrawingClaimStatus;
@@ -86,27 +84,6 @@ export function createDrawingRoutes({
         }));
       } catch (error) {
         sendError(res, error, apiErrorCodes.DRAWING_COMPLETE_FAILED);
-      }
-    });
-
-    app.post("/api/confirm-orders", async (req, res) => {
-      try {
-        const { result, missing } = await confirmOrders({
-          materialCodes: materialCodesFromRequest(req.body),
-          tableKey: req.body?.tableKey,
-        });
-        const updated = result.filter((item) => item.changed);
-        const alreadyConfirmed = result.filter((item) => !item.changed);
-        res.json(successResponse({
-          count: updated.length,
-          matchedCount: result.length,
-          alreadyConfirmedCount: alreadyConfirmed.length,
-          materialCodes: [...new Set(result.map((item) => item.materialCode))],
-          missing,
-          result,
-        }));
-      } catch (error) {
-        sendError(res, error, apiErrorCodes.ORDER_CONFIRMATION_FAILED);
       }
     });
 

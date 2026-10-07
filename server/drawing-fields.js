@@ -15,6 +15,7 @@ export const drawingDurationFieldAliases = [
 ];
 export const drawingScoreField = "分值";
 export const drawingRegionField = "区域";
+export const drawingBusinessField = "业务";
 export const drawingOrderField = "是否下单";
 export const drawingOwnerAliases = {
   莫长峰: "莫长锋",

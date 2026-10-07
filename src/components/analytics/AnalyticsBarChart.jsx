@@ -11,7 +11,17 @@ function formatMetric(value) {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(Number(value || 0));
 }
 
-export function AnalyticsBarChart({ title, description, items, valueKey, suffix = "", tone = "blue", emptyText, loading = false }) {
+export function AnalyticsBarChart({
+  title,
+  description,
+  items,
+  valueKey,
+  suffix = "",
+  tone = "blue",
+  emptyText,
+  loading = false,
+  valueFormatter = formatMetric,
+}) {
   const availableItems = (items || [])
     .filter((item) => Number.isFinite(Number(item[valueKey])))
     .sort((left, right) => Number(right[valueKey]) - Number(left[valueKey]));
@@ -49,7 +59,7 @@ export function AnalyticsBarChart({ title, description, items, valueKey, suffix 
               return (
                 <div className="analytics-column-item" role="listitem" key={item.name}>
                   <div className="analytics-column-plot" style={{ "--bar-height": `${height}%` }}>
-                    <span className="analytics-column-value">{formatMetric(value)}{suffix}</span>
+                    <span className="analytics-column-value">{valueFormatter(value)}{suffix}</span>
                     <span
                       className="analytics-column-bar"
                       aria-hidden="true"

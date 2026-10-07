@@ -432,6 +432,13 @@ function isSpreadsheetDataRow(headers, row) {
 
   const record = rowToRecord(headers, row);
   const meaningfulFields = [
+    "业务姓名",
+    "业务",
+    "料件编号",
+    "订购总数量",
+    "销售单价",
+    "销售总价",
+    "类别",
     "产品名称",
     "型号",
     "规格",

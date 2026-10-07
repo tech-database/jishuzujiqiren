@@ -778,7 +778,6 @@ button:disabled,
 .command-readonly-note,
 .drawing-boundary-note,
 .people-boundary-note,
-.assignment-submit-state,
 .import-target-row {
   border-color: rgba(79, 123, 203, 0.24);
   color: var(--text-primary);
@@ -927,7 +926,6 @@ button:disabled,
 .command-detail-item,
 .drawing-current-task,
 .drawing-operator-metrics > div,
-.assignment-summary-metrics > div,
 .import-result-metrics > div {
   border-color: rgba(76, 121, 204, 0.22);
   color: #c5d8f7;
@@ -964,7 +962,6 @@ button:disabled,
 
 .import-file-card,
 .drawing-task-row,
-.assignment-code-list,
 .assignment-query-list article {
   border-color: rgba(75, 119, 200, 0.24);
   color: var(--text-primary);
@@ -996,14 +993,6 @@ button:disabled,
   border-color: rgba(86, 133, 216, 0.3) !important;
   color: var(--text-primary) !important;
   background: rgba(3, 12, 27, 0.76) !important;
-}
-
-.assignment-summary-metrics span,
-.assignment-code-list li,
-.assignment-code-empty {
-  border-color: rgba(75, 119, 200, 0.24);
-  color: var(--text-secondary);
-  background: rgba(5, 15, 32, 0.7);
 }
 
 .monitoring-chart-card,

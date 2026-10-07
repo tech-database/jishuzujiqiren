@@ -288,16 +288,6 @@
   font-size: 0.75rem;
 }
 
-.assignment-submit-state {
-  min-height: 34px;
-  border: 0;
-  border-radius: 8px;
-  color: #58677c;
-  background: #f7f9fc;
-  padding: 7px 9px;
-  font-size: 0.75rem;
-}
-
 .assignment-result-panel,
 .assignment-error-panel {
   border-radius: 12px;
@@ -438,8 +428,7 @@ select {
 .connection-status-copy span,
 .connection-status-meta,
 .drawing-operator-metrics small,
-.import-file-card-copy span,
-.assignment-submit-state {
+.import-file-card-copy span {
   font-size: var(--text-size-sm);
   line-height: 1.45;
 }

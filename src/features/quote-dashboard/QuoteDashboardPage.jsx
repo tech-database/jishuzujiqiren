@@ -525,7 +525,7 @@ export default function QuoteDashboardPage() {
     }
   }, []);
 
-  const loadInitialDashboard = useCallback(async (signal) => {
+  const loadInitialDashboard = useCallback(async (signal, { force = false } = {}) => {
     setLoadingSections((current) => ({
       ...current,
       today: true,
@@ -535,6 +535,7 @@ export default function QuoteDashboardPage() {
     try {
       const monthRange = monthDateRange(currentMonth);
       const result = await getInitialQuoteDashboard({
+        force,
         signal,
         today,
         monthStartDate: monthRange.startDate,
@@ -630,7 +631,7 @@ export default function QuoteDashboardPage() {
 
   const refreshAll = useCallback(() => {
     setError("");
-    loadInitialDashboard();
+    loadInitialDashboard(undefined, { force: true });
     if (summaryMonth !== currentMonth) {
       loadSection("summary", monthDateRange(summaryMonth), setSummaryMonthData);
     }

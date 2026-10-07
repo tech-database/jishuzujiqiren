@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   createQuoteStatisticsRoutes,
   quoteManualEntryFields,
-  quoteStatisticsFields,
+  quoteOrderEntryFields,
 } from "./quote-statistics-routes.js";
 
 function createHarness(registerRoutes) {
@@ -36,7 +36,7 @@ function createHarness(registerRoutes) {
   return { request };
 }
 
-test("quote preview parses but does not write, while commit writes one quote record", async () => {
+test("order preview parses but does not write, while commit writes every order row", async () => {
   let writeCalls = 0;
   const summary = {
     类型: "下单",
@@ -48,22 +48,40 @@ test("quote preview parses but does not write, while commit writes one quote rec
     单价: 100,
     总价: 300,
   };
+  const records = [
+    { ...summary, 料件编号: "J-001", 数量: 1, 单价: 100, 总价: 100 },
+    { ...summary, 料件编号: "J-002", 数量: 2, 单价: 100, 总价: 200 },
+  ];
   const harness = createHarness(
     createQuoteStatisticsRoutes({
       services: {
         parseSpreadsheetBuffer: async () => [{ 销售单价: 100, 销售总价: 300 }],
-        summarizeQuoteRecords: (_records, options) => {
+        normalizeOrderRecords: (_records, options) => {
           assert.equal(options.entryType, "下单");
           assert.equal(options.quoteOfficer, "胡燕绮");
           assert.equal(options.quoteDate, "2026-07-28");
-          return { summary, sourceRowCount: 1 };
+          return { summary, records, recordCount: 2, sourceRowCount: 2 };
+        },
+        confirmDrawingOrders: async (options) => {
+          assert.deepEqual(options, {
+            materialCodes: ["J-001", "J-002"],
+            allowMissing: true,
+          });
+          assert.equal(Object.hasOwn(options, "tableKey"), false);
+          return {
+            result: [
+              { materialCode: "J-001", table: "paint", changed: true },
+              { materialCode: "J-002", table: "paint", changed: false },
+            ],
+            missing: [],
+          };
         },
         createBitableRecords: async (records, options) => {
           writeCalls += 1;
-          assert.deepEqual(records, [summary]);
+          assert.equal(records.length, 2);
           assert.equal(options.tableKey, "quote");
-          assert.deepEqual(options.requiredFields, quoteStatisticsFields);
-          return [{ recordId: "record-1" }];
+          assert.deepEqual(options.requiredFields, quoteOrderEntryFields);
+          return [{ recordId: "record-1" }, { recordId: "record-2" }];
         },
       },
     }).registerRoutes,
@@ -80,7 +98,12 @@ test("quote preview parses but does not write, while commit writes one quote rec
   assert.equal(writeCalls, 0);
 
   const commit = await harness.request("/api/quote-statistics/commit", { query });
-  assert.equal(commit.body.count, 1);
+  assert.equal(commit.body.count, 2);
+  assert.deepEqual(commit.body.orderSync, {
+    matchedCount: 2,
+    changedCount: 1,
+    missing: [],
+  });
   assert.equal(writeCalls, 1);
 });
 
@@ -121,6 +144,7 @@ test("manual data entry writes one typed record to the quote statistics table", 
     报价员: "杨利伟",
     区域: "华北区",
     业务: "李艳",
+    料件编号: "J-001",
     数量: 2,
     单价: 100,
     总价: 200,
@@ -149,6 +173,100 @@ test("manual data entry writes one typed record to the quote statistics table", 
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.count, 1);
   assert.deepEqual(response.body.entry, entry);
+});
+
+test("manual order entry synchronizes by material code across both drawing tables", async () => {
+  const entry = {
+    类型: "下单",
+    报价日期: "2026-10-07",
+    类别: "油漆",
+    报价员: "朱海韵",
+    区域: "华北区",
+    业务: "李艳",
+    料件编号: "J-SHARED-001",
+    数量: 2,
+    单价: 100,
+    总价: 200,
+  };
+  let receivedOptions;
+  const harness = createHarness(
+    createQuoteStatisticsRoutes({
+      services: {
+        normalizeManualQuoteEntry: () => entry,
+        confirmDrawingOrders: async (options) => {
+          receivedOptions = options;
+          return {
+            result: [{ materialCode: "J-SHARED-001", table: "board", changed: true }],
+            missing: [],
+          };
+        },
+        createBitableRecords: async () => [{ recordId: "order-1" }],
+      },
+    }).registerRoutes,
+  );
+
+  const response = await harness.request("/api/quote-statistics/manual", {
+    body: { type: "下单" },
+  });
+
+  assert.deepEqual(receivedOptions, {
+    materialCodes: ["J-SHARED-001"],
+    allowMissing: true,
+  });
+  assert.equal(Object.hasOwn(receivedOptions, "tableKey"), false);
+  assert.deepEqual(response.body.orderSync, {
+    matchedCount: 1,
+    changedCount: 1,
+    missing: [],
+  });
+});
+
+test("order import writes statistics and reports material codes missing from drawing tables", async () => {
+  let writeCalls = 0;
+  const record = {
+    类型: "下单",
+    报价日期: "2026-10-07",
+    类别: "油漆",
+    报价员: "朱海韵",
+    区域: "华北区",
+    业务: "李艳",
+    料件编号: "J-MISSING",
+    数量: 1,
+    单价: 100,
+    总价: 100,
+  };
+  const harness = createHarness(
+    createQuoteStatisticsRoutes({
+      services: {
+        parseSpreadsheetBuffer: async () => [{}],
+        normalizeOrderRecords: () => ({
+          summary: record,
+          records: [record],
+          recordCount: 1,
+          sourceRowCount: 1,
+        }),
+        confirmDrawingOrders: async () => ({ result: [], missing: ["J-MISSING"] }),
+        createBitableRecords: async () => {
+          writeCalls += 1;
+          return [{ recordId: "quote-order-1" }];
+        },
+      },
+    }).registerRoutes,
+  );
+
+  const response = await harness.request("/api/quote-statistics/commit", {
+    query: { fileName: "下单.xlsx", entryType: "下单", quoteOfficer: "朱海韵" },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.count, 1);
+  assert.deepEqual(response.body.orderSync, {
+    matchedCount: 0,
+    changedCount: 0,
+    missing: ["J-MISSING"],
+  });
+  assert.match(response.body.warnings[0], /J-MISSING.*已跳过同步/);
+  assert.equal(writeCalls, 1);
 });
 
 test("quote routes reject empty or unsupported files", async () => {

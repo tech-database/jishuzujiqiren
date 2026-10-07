@@ -54,7 +54,9 @@ export function useAnalyticsController({ configReady, targetTable }) {
     data,
     dateRange,
     durationItems: useMemo(
-      () => (data?.owners || []).filter((item) => item.averageDuration !== null),
+      () => (data?.owners || []).filter(
+        (item) => item.name && item.name !== "未分配" && item.averageDuration !== null,
+      ),
       [data?.owners],
     ),
     error,

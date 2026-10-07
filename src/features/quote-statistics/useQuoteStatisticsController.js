@@ -25,11 +25,12 @@ export const quoteOfficerOptions = Object.freeze([
   { name: "胡燕绮", category: "软体" },
 ]);
 
-export function assertSingleQuoteWrite(result) {
+export function assertQuoteWriteCount(result, expectedCount = 1) {
   const count = Number(result?.count);
-  if (count === 1) return;
+  const expected = Number(expectedCount);
+  if (count === expected) return;
   throw new Error(
-    `写入结果异常：应创建 1 条记录，实际创建 ${Number.isFinite(count) ? count : 0} 条。`,
+    `写入结果异常：应创建 ${expected} 条记录，实际创建 ${Number.isFinite(count) ? count : 0} 条。`,
   );
 }
 
@@ -87,11 +88,15 @@ function quoteFileQueueState(row) {
 
 export function buildQuoteFileQueue(files, previewRows) {
   const previewByKey = new Map(previewRows.map((row) => [row.key, row]));
-  return files.map((file) => ({
-    file,
-    key: getImportFileKey(file),
-    ...quoteFileQueueState(previewByKey.get(getImportFileKey(file))),
-  }));
+  return files.map((file) => {
+    const preview = previewByKey.get(getImportFileKey(file));
+    return {
+      file,
+      key: getImportFileKey(file),
+      error: preview?.error || "",
+      ...quoteFileQueueState(preview),
+    };
+  });
 }
 
 export function useQuoteStatisticsController() {
@@ -241,6 +246,7 @@ export function useQuoteStatisticsController() {
                 ...data.summary,
                 fileName: data.fileName,
                 sourceRowCount: data.sourceRowCount,
+                recordCount: data.recordCount || 1,
                 ignoredUnpricedRowCount: data.ignoredUnpricedRowCount || 0,
                 ignoredInvalidRowCount: data.ignoredInvalidRowCount || 0,
                 warnings: data.warnings || [],
@@ -273,6 +279,7 @@ export function useQuoteStatisticsController() {
 
     setBusy(true);
     let successCount = 0;
+    let writtenRecordCount = 0;
     let failedCount = 0;
     for (let index = 0; index < rowsToCommit.length; index += 1) {
       const row = rowsToCommit[index];
@@ -289,8 +296,9 @@ export function useQuoteStatisticsController() {
           quoteDate,
           uploadType,
         );
-        assertSingleQuoteWrite(result);
+        assertQuoteWriteCount(result, row.recordCount || 1);
         successCount += 1;
+        writtenRecordCount += Number(result.count || 0);
         setPreviewRows((current) =>
           current.map((item) => item.key === row.key ? { ...item, status: "written" } : item));
       } catch (error) {
@@ -304,8 +312,8 @@ export function useQuoteStatisticsController() {
     setFeedback({
       ok: failedCount === 0,
       text: failedCount === 0
-        ? `已成功写入 ${successCount} 条${uploadType}统计记录。`
-        : `写入完成：成功 ${successCount} 条，失败 ${failedCount} 条，可重试失败项。`,
+        ? `已成功写入 ${writtenRecordCount} 条${uploadType}统计记录。`
+        : `写入完成：成功 ${successCount} 份（${writtenRecordCount} 条），失败 ${failedCount} 份，可重试失败项。`,
     });
     setBusy(false);
   }

@@ -1,6 +1,7 @@
 import { bitableValueToText, parseBitableDateValue } from "./bitable-values.js";
 import {
   drawingClaimTimeField,
+  drawingBusinessField,
   drawingCompleteTimeField,
   drawingDateField,
   drawingMaterialFields,
@@ -10,7 +11,13 @@ import {
   drawingStatuses,
   drawingStatusField,
 } from "./drawing-fields.js";
-import { drawingTableKeys, getBitableConfig, resolveTableKey } from "./runtime-config.js";
+import { resolveBusinessRegion } from "./business-region-service.js";
+import {
+  drawingTableKeys,
+  getBitableConfig,
+  readBusinessRegionMap,
+  resolveTableKey,
+} from "./runtime-config.js";
 import { getTenantAccessToken } from "./feishu-client.js";
 import {
   getBitableFieldMap,
@@ -254,6 +261,7 @@ export async function queryDrawingAnalytics(
     drawingOwnerField,
     drawingScoreField,
     drawingRegionField,
+    drawingBusinessField,
     durationField,
     ...drawingMaterialFields,
   ].filter((fieldName) => fieldName && fieldTypes.has(fieldName));
@@ -269,6 +277,7 @@ export async function queryDrawingAnalytics(
 
   if (!fieldTypes.has(drawingOwnerField)) throw new Error(`数据表缺少字段：${drawingOwnerField}`);
   const taskRecords = records.filter((record) => getDrawingMaterialCode(record.fields || {}));
+  const businessRegionMap = readBusinessRegionMap();
 
   const owners = new Map();
   const regions = new Map();
@@ -279,34 +288,41 @@ export async function queryDrawingAnalytics(
 
   for (const record of taskRecords) {
     const fields = record.fields || {};
-    const owner = bitableValueToText(fields[drawingOwnerField]) || "未分配";
-    const region = bitableValueToText(fields[drawingRegionField]) || "未填写";
+    const owner = bitableValueToText(fields[drawingOwnerField]);
+    const region = resolveBusinessRegion(fields, "未填写", businessRegionMap);
     const score = bitableValueToNumber(fields[drawingScoreField]);
     const duration = durationField ? bitableValueToNumber(fields[durationField]) : null;
 
-    if (!owners.has(owner)) {
-      owners.set(owner, {
-        name: owner,
-        count: 0,
-        score: 0,
-        scoredRecords: 0,
-        durationTotal: 0,
-        durationRecords: 0,
-      });
-    }
-    const ownerItem = owners.get(owner);
-    ownerItem.count += 1;
     if (score !== null) {
-      ownerItem.score += score;
-      ownerItem.scoredRecords += 1;
       totalScore += score;
       scoredRecords += 1;
     }
     if (duration !== null) {
-      ownerItem.durationTotal += duration;
-      ownerItem.durationRecords += 1;
       totalDuration += duration;
       durationRecords += 1;
+    }
+
+    if (owner && owner !== "未分配") {
+      if (!owners.has(owner)) {
+        owners.set(owner, {
+          name: owner,
+          count: 0,
+          score: 0,
+          scoredRecords: 0,
+          durationTotal: 0,
+          durationRecords: 0,
+        });
+      }
+      const ownerItem = owners.get(owner);
+      ownerItem.count += 1;
+      if (score !== null) {
+        ownerItem.score += score;
+        ownerItem.scoredRecords += 1;
+      }
+      if (duration !== null) {
+        ownerItem.durationTotal += duration;
+        ownerItem.durationRecords += 1;
+      }
     }
 
     regions.set(region, (regions.get(region) || 0) + 1);
@@ -335,7 +351,7 @@ export async function queryDrawingAnalytics(
     checkedAt: new Date().toISOString(),
     summary: {
       total: taskRecords.length,
-      owners: ownerItems.filter((item) => item.name !== "未分配").length,
+      owners: ownerItems.length,
       regions: regionItems.filter((item) => item.name !== "未填写").length,
       totalScore: Math.round(totalScore * 10) / 10,
       scoredRecords,

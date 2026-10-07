@@ -1,7 +1,11 @@
 import { BarChart3, Clock3, MapPinned, RefreshCw, Sigma, UsersRound } from "lucide-react";
+import { useMemo } from "react";
 import { AnalyticsBarChart } from "./AnalyticsBarChart.jsx";
 import { GlassButton, GlassCard } from "../design-system";
-import { formatAnalyticsMetric } from "../../features/analytics/analytics.model.js";
+import {
+  formatAnalyticsHours,
+  formatAnalyticsMetric,
+} from "../../features/analytics/analytics.model.js";
 import { useAnalyticsController } from "../../features/analytics/useAnalyticsController.js";
 
 const tableOptions = [
@@ -51,6 +55,10 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
   } = useAnalyticsController({ configReady, targetTable });
   const tableLabel = targetTable === "paint" ? "油漆" : "胶板";
   const summary = data?.summary || {};
+  const assignedOwners = useMemo(
+    () => (data?.owners || []).filter((item) => item.name && item.name !== "未分配"),
+    [data?.owners],
+  );
 
   return (
     <section className="analytics-center">
@@ -102,7 +110,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
         <SummaryMetric
           icon={Clock3}
           label="整体平均用时"
-          value={loading && !data ? "—" : formatAnalyticsMetric(summary.averageDuration, " 分")}
+          value={loading && !data ? "—" : formatAnalyticsHours(summary.averageDuration)}
           detail={`${summary.durationRecords || 0} 条记录可计算`}
           tone="orange"
         />
@@ -119,7 +127,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
         <AnalyticsBarChart
           title="绘图人绘图数量"
           description={`${tableLabel}表内各绘图人的记录数量。`}
-          items={data?.owners}
+          items={assignedOwners}
           valueKey="count"
           suffix=" 张"
           tone="blue"
@@ -128,7 +136,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
         <AnalyticsBarChart
           title="绘图人分值"
           description="按绘图人汇总已填写的分值。"
-          items={data?.owners}
+          items={assignedOwners}
           valueKey="score"
           suffix=" 分"
           tone="cyan"
@@ -140,7 +148,7 @@ export default function DataAnalyticsCenter({ configReady, targetTable, setTarge
           description="按绘图人计算可用记录的平均用时。"
           items={durationItems}
           valueKey="averageDuration"
-          suffix=" 分"
+          valueFormatter={formatAnalyticsHours}
           tone="orange"
           loading={loading}
           emptyText="当前日期范围内没有可计算用时的记录"

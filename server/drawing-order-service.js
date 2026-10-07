@@ -11,6 +11,7 @@ import {
   assertUniqueMatchedItemsAcrossTables,
   isOrderConfirmed,
   matchDrawingRecordsByMaterialCodes,
+  normalizeMaterialCodeForMatch,
   normalizeMaterialCodes,
   orderConfirmedValue,
 } from "./drawing-record-utils.js";
@@ -32,7 +33,7 @@ export function createDrawingOrderService(overrides = {}) {
 }
 
 export async function confirmDrawingOrders(
-  { materialCodes, tableKey },
+  { materialCodes, tableKey, allowMissing = false },
   dependencies = defaultDependencies,
 ) {
   const {
@@ -91,15 +92,32 @@ export async function confirmDrawingOrders(
   }
 
   const missing = codes.filter((code) => !foundCodes.has(code));
-  if (matchedItems.length === 0) throw new Error(`未找到料号：${missing.join("，")}`);
-  assertUniqueMatchedItemsAcrossTables(matchedItems, "下单确认");
+  if (matchedItems.length === 0) {
+    if (allowMissing) return { result: [], missing };
+    throw new Error(`未找到料号：${missing.join("，")}`);
+  }
+  const previouslyConfirmedCodes = new Set(
+    matchedItems
+      .filter((item) => item.records.some((record) => (
+        isOrderConfirmed(record.fields?.[drawingOrderField])
+      )))
+      .map((item) => normalizeMaterialCodeForMatch(item.materialCode)),
+  );
+  const actionableItems = matchedItems.filter((item) => (
+    !previouslyConfirmedCodes.has(normalizeMaterialCodeForMatch(item.materialCode))
+  ));
+  assertUniqueMatchedItemsAcrossTables(actionableItems, "下单确认");
 
   const result = [];
   const plans = [];
   for (const item of matchedItems) {
+    const previouslyConfirmed = previouslyConfirmedCodes.has(
+      normalizeMaterialCodeForMatch(item.materialCode),
+    );
     const fieldType = item.fieldTypes.get(drawingOrderField);
     for (const record of item.records) {
-      const alreadyConfirmed = isOrderConfirmed(record.fields?.[drawingOrderField]);
+      const alreadyConfirmed = previouslyConfirmed
+        || isOrderConfirmed(record.fields?.[drawingOrderField]);
       if (!alreadyConfirmed) {
         plans.push({
           tableConfig: item.tableConfig,
@@ -114,6 +132,7 @@ export async function confirmDrawingOrders(
         recordId: record.record_id,
         materialCode: item.materialCode,
         changed: !alreadyConfirmed,
+        skipped: previouslyConfirmed ? "already_confirmed" : "",
       });
     }
   }

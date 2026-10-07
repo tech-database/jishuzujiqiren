@@ -25,6 +25,23 @@ test("parses a variable-layout xlsx workbook", async () => {
   assert.equal(records[0]["数量"], "12");
 });
 
+test("recognizes every row in the order import template", async () => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Sheet1");
+  sheet.addRow(["业务姓名", "料件编号", "订购总数量", "销售单价", "销售总价", "类别"]);
+  sheet.addRow(["李艳", "J-ORDER-001", 2, 100, 200, "胶板"]);
+  sheet.addRow(["谢广", "J-ORDER-002", 3, 50, 150, "油漆"]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+  const records = await parseSpreadsheetBuffer(buffer, { fileName: "下单导入模板.xlsx" });
+
+  assert.equal(records.length, 2);
+  assert.equal(records[0]["业务姓名"], "李艳");
+  assert.equal(records[0]["料件编号"], "J-ORDER-001");
+  assert.equal(records[0]["订购总数量"], "2");
+  assert.equal(records[1]["类别"], "油漆");
+});
+
 test("reads the worksheet that was active when the xlsx workbook was saved", async () => {
   const workbook = new ExcelJS.Workbook();
   const firstSheet = workbook.addWorksheet("说明");

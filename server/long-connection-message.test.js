@@ -5,7 +5,6 @@ import {
   isCompletionMessage,
   isDrawingCompleteCommand,
   isHelpCommand,
-  isOrderConfirmationCommand,
   isStatusSyncCommand,
   isUnclaimedQueryCommand,
 } from "./long-connection-message.js";
@@ -17,7 +16,6 @@ test("matches supported long-connection text commands", () => {
   assert.equal(isCompletionMessage(mentioned("@机器人 完成")), true);
   assert.equal(isHelpCommand(mentioned("@机器人 帮助")), true);
   assert.equal(isDrawingCompleteCommand(mentioned("@机器人 绘图完成 A001")), true);
-  assert.equal(isOrderConfirmationCommand(mentioned("@机器人 下单确认 A001")), true);
   assert.equal(isUnclaimedQueryCommand(mentioned("@机器人 查询全部未领取")), true);
   assert.equal(isStatusSyncCommand(mentioned("@机器人 状态检测")), true);
 });

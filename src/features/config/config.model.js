@@ -10,6 +10,7 @@ export const emptyConfig = {
   quoteBitableTableId: "",
   replyEnabled: false,
   nameIdMap: {},
+  businessRegionMap: {},
 };
 
 export function invertFieldMap(fieldMap) {
@@ -68,4 +69,36 @@ export function buildNameIdMap(rows) {
     if (id && name) result[id] = name;
   }
   return result;
+}
+
+export function normalizeBusinessRegionMap(source) {
+  let value = source;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([name, region]) => [String(name || "").trim(), String(region || "").trim()])
+      .filter(([name, region]) => name && region),
+  );
+}
+
+export function mapToBusinessRegionRows(source) {
+  return Object.entries(normalizeBusinessRegionMap(source)).map(([name, region]) => ({
+    name,
+    region,
+  }));
+}
+
+export function buildBusinessRegionMap(rows) {
+  return Object.fromEntries(
+    (Array.isArray(rows) ? rows : [])
+      .map((row) => [String(row?.name || "").trim(), String(row?.region || "").trim()])
+      .filter(([name, region]) => name && region),
+  );
 }

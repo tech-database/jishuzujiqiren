@@ -1,21 +1,16 @@
-import { bitableValueToText } from "./bitable-values.js";
+import { bitableValueToText, parseBitableDateValue } from "./bitable-values.js";
 import { formatShanghaiDate, parseShanghaiDateBoundary } from "./date-range.js";
-import {
-  drawingDateField,
-  drawingOrderField,
-  drawingRegionField,
-} from "./drawing-fields.js";
 import { bitableValueToNumber } from "./drawing-domain-utils.js";
-import { isOrderConfirmed } from "./drawing-record-utils.js";
 import { quoteOfficerCategories } from "./quote-statistics-service.js";
-import { drawingTableKeys, getBitableConfig } from "./runtime-config.js";
+import { quoteDateField } from "./quote-fields.js";
+import { resolveBusinessRegion } from "./business-region-service.js";
+import { getBitableConfig, readBusinessRegionMap } from "./runtime-config.js";
 import { getTenantAccessToken } from "./feishu-client.js";
 import {
   getBitableFieldMap,
   listCachedBitableRecords,
 } from "./bitable-client.js";
 
-const quoteDateField = "报价日期";
 const quoteTypeField = "类型";
 const quoteCategoryField = "类别";
 const quoteOfficerField = "报价员";
@@ -26,12 +21,9 @@ const quoteRegionField = "区域";
 const quoteBusinessField = "业务";
 const quoteUnitPriceField = "单价";
 const quoteTotalField = "总价";
-const drawingBusinessField = "业务";
-const drawingQuantityField = "数量";
-const drawingSalesUnitPriceField = "销售单价";
+const quoteDashboardRecordCacheTtlMs = 60 * 60 * 1000;
 
 const defaultDependencies = Object.freeze({
-  drawingTableKeys,
   getBitableConfig,
   getTenantAccessToken,
   getBitableFieldMap,
@@ -66,8 +58,11 @@ function queryRange(today, startDate, endDate) {
 function quoteRecordDate(value) {
   const text = bitableValueToText(value).trim().replace(/[/.]/g, "-");
   const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (!match) return "";
-  return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  if (match) {
+    return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  }
+  const timestamp = parseBitableDateValue(value);
+  return timestamp === null ? "" : formatShanghaiDate(new Date(timestamp));
 }
 
 function addAmount(map, name, fieldName, amount) {
@@ -220,7 +215,6 @@ export async function queryQuoteDashboard(
   dependencies = defaultDependencies,
 ) {
   const {
-    drawingTableKeys,
     getBitableConfig,
     getTenantAccessToken,
     getBitableFieldMap,
@@ -230,11 +224,20 @@ export async function queryQuoteDashboard(
   const today = formatShanghaiDate(now);
   const range = queryRange(today, startDate, endDate);
   const warnings = [];
+  const businessRegionMap = readBusinessRegionMap();
 
   const quoteConfig = getBitableConfig("quote");
   const quoteFields = await getBitableFieldMap(token, quoteConfig);
   assertQuoteFields(quoteFields);
   const quoteRecords = await listCachedBitableRecords(token, quoteConfig, {
+    cacheTtlMs: quoteDashboardRecordCacheTtlMs,
+    ...(quoteFields.get(quoteDateField) === 5
+      ? {
+          startDate: range.startDate,
+          endDate: range.endDate,
+          dateFieldName: quoteDateField,
+        }
+      : {}),
     fieldNames: [
       quoteDateField,
       ...(quoteFields.has(quoteTypeField) ? [quoteTypeField] : []),
@@ -272,7 +275,7 @@ export async function queryQuoteDashboard(
     if (recordType === "下单") {
       if (recordDate < range.startDate || recordDate > range.endDate) continue;
       const orderData = {
-        region: bitableValueToText(fields[quoteRegionField]),
+        region: resolveBusinessRegion(fields, "", businessRegionMap),
         business: bitableValueToText(fields[quoteBusinessField]),
         total,
       };
@@ -288,7 +291,7 @@ export async function queryQuoteDashboard(
       range,
       officerName,
       category,
-      region: bitableValueToText(fields[quoteRegionField]),
+      region: resolveBusinessRegion(fields, "", businessRegionMap),
       business: bitableValueToText(fields[quoteBusinessField]),
       unitPrice,
       total,
@@ -297,56 +300,6 @@ export async function queryQuoteDashboard(
     if (category === "胶板") addQuoteRecord(categoryStats.board, quoteData);
     if (category === "油漆") addQuoteRecord(categoryStats.paint, quoteData);
     if (category === "软体") addQuoteRecord(categoryStats.soft, quoteData);
-  }
-
-  const drawingResults = await Promise.all(drawingTableKeys().map(async (tableKey) => {
-    let tableConfig;
-    try {
-      tableConfig = getBitableConfig(tableKey);
-    } catch (error) {
-      warnings.push(error.message);
-      return null;
-    }
-    const fieldTypes = await getBitableFieldMap(token, tableConfig);
-    const required = [
-      drawingDateField,
-      drawingOrderField,
-      drawingRegionField,
-      drawingBusinessField,
-      drawingQuantityField,
-      drawingSalesUnitPriceField,
-    ];
-    const missing = required.filter((fieldName) => !fieldTypes.has(fieldName));
-    if (missing.length > 0) {
-      warnings.push(`${tableConfig.label}表缺少字段：${missing.join("、")}`);
-      return null;
-    }
-    const drawingRecords = await listCachedBitableRecords(token, tableConfig, {
-      startDate: range.startDate,
-      endDate: range.endDate,
-      fieldNames: required,
-    });
-    return { tableKey, drawingRecords };
-  }));
-
-  for (const drawingResult of drawingResults) {
-    if (!drawingResult) continue;
-    const { tableKey, drawingRecords } = drawingResult;
-    for (const record of drawingRecords) {
-      const fields = record.fields || {};
-      if (!isOrderConfirmed(fields[drawingOrderField])) continue;
-      const quantity = bitableValueToNumber(fields[drawingQuantityField]);
-      const unitPrice = bitableValueToNumber(fields[drawingSalesUnitPriceField]);
-      if (quantity === null || unitPrice === null) continue;
-      const total = quantity * unitPrice;
-      const orderData = {
-        region: bitableValueToText(fields[drawingRegionField]),
-        business: bitableValueToText(fields[drawingBusinessField]),
-        total,
-      };
-      addOrderRecord(overallStats, orderData);
-      addOrderRecord(tableKey === "paint" ? categoryStats.paint : categoryStats.board, orderData);
-    }
   }
 
   const overall = finalizeDashboardStats(overallStats, officerOrder);

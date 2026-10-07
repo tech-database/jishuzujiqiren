@@ -3,13 +3,18 @@ import test from "node:test";
 
 import { createLongConnectionSpreadsheetHandler } from "./long-connection-spreadsheet-handler.js";
 
-function createHandler({ parseSpreadsheetBuffer, replies, sessionsMap }) {
+function createHandler({
+  createBitableRecords = async () => [],
+  parseSpreadsheetBuffer,
+  replies,
+  sessionsMap,
+}) {
   const sessions = {
     sessions: sessionsMap,
     end: () => {},
   };
   return createLongConnectionSpreadsheetHandler({
-    createBitableRecords: async () => [],
+    createBitableRecords,
     downloadResource: async () => Buffer.from("spreadsheet"),
     messageHistory: {
       listFiles: async () => [],
@@ -93,5 +98,34 @@ test("replies with the parser error when polling recovers a spreadsheet completi
   assert.deepEqual(replies, [{
     chatId: "chat-polled",
     text: "表格处理失败：表格列数过多（16375 列），最多允许 500 列。",
+  }]);
+});
+
+test("replies with the missing personnel-region name and does not report success", async () => {
+  const replies = [];
+  const handler = createHandler({
+    parseSpreadsheetBuffer: async () => [{ 业务: "未登记人员", 料号: "A-001" }],
+    createBitableRecords: async () => {
+      throw new Error("人员区域中未找到业务“未登记人员”，请先新增人员区域后再上传");
+    },
+    replies,
+    sessionsMap: new Map(),
+  });
+
+  const outcome = await handler.handleCompletion(
+    { chatId: "chat-region", messageId: "completion-region" },
+    {
+      files: [{
+        chatId: "chat-region",
+        messageId: "file-region",
+        resources: [{ type: "file", fileKey: "key-region", fileName: "胶板上传.xlsx" }],
+      }],
+    },
+  );
+
+  assert.equal(outcome.status, "failed");
+  assert.deepEqual(replies, [{
+    chatId: "chat-region",
+    text: "表格处理失败：人员区域中未找到业务“未登记人员”，请先新增人员区域后再上传",
   }]);
 });

@@ -42,7 +42,8 @@ test("status commands normalize one or two explicit dates", () => {
 
 test("help text documents every supported command family", () => {
   const help = commandHelpText();
-  for (const phrase of ["胶板新增", "领图", "绘图完成", "下单确认", "查询未领取", "状态检测", "获取ID"]) {
+  for (const phrase of ["胶板新增", "领图", "绘图完成", "查询未领取", "状态检测", "获取ID"]) {
     assert.match(help, new RegExp(phrase));
   }
+  assert.doesNotMatch(help, /下单确认/);
 });

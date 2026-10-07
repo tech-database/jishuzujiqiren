@@ -113,7 +113,8 @@ test("ignores blank template rows in every dashboard and status statistic", asyn
 
     const analytics = await queryDrawingAnalytics({ tableKey: "board" });
     assert.equal(analytics.summary.total, 1);
-    assert.equal(analytics.owners.find((item) => item.name === "未分配")?.count, 1);
+    assert.equal(analytics.summary.owners, 0);
+    assert.equal(analytics.owners.some((item) => item.name === "未分配"), false);
     assert.equal(analytics.owners.some((item) => item.name === "模板人员"), false);
 
     const ownerStats = await queryDrawingOwnerStats({ tableKey: "board" });

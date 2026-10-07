@@ -8,8 +8,8 @@ import {
   FileUp,
   House,
   Images,
+  MapPinned,
   MessageSquareText,
-  PackageCheck,
   Settings2,
   UsersRound,
 } from "lucide-react";
@@ -21,15 +21,15 @@ export const ConnectionManagementCenter = React.lazy(
 );
 export const CommandCenter = React.lazy(() => import("../features/commands/CommandsPage.jsx"));
 export const PeopleMappingCenter = React.lazy(() => import("../features/people/PeoplePage.jsx"));
+export const BusinessRegionsCenter = React.lazy(
+  () => import("../features/business-regions/BusinessRegionsPage.jsx"),
+);
 export const DrawingOperationsCenter = React.lazy(
   () => import("../features/drawing/DrawingOperationsPage.jsx"),
 );
 export const DataImportCenter = React.lazy(() => import("../features/import-data/ImportPage.jsx"));
 export const DrawingAssignmentCenter = React.lazy(
   () => import("../features/drawing/DrawingAssignmentPage.jsx"),
-);
-export const OrderConfirmationCenter = React.lazy(
-  () => import("../features/orders/OrderConfirmationPage.jsx"),
 );
 export const DataAnalyticsCenter = React.lazy(
   () => import("../features/analytics/AnalyticsPage.jsx"),
@@ -49,13 +49,13 @@ export const appRoutes = [
   { id: "mapping", path: "/mapping", title: "字段映射", icon: Database, badge: "fields" },
   { id: "commands", path: "/commands", title: "飞书口令", icon: MessageSquareText },
   { id: "people", path: "/people", title: "人员映射", icon: UsersRound, adminOnly: true },
+  { id: "regions", path: "/regions", title: "人员区域", icon: MapPinned, adminOnly: true },
   { id: "status", path: "/status", title: "绘图状态检测", icon: Activity },
   { id: "owners", path: "/owners", title: "绘图人动态", icon: UsersRound },
   { id: "analytics", path: "/analytics", title: "绘图数据看板", icon: ChartNoAxesCombined },
   { id: "quotes", path: "/quotes", title: "报价统计", icon: BadgeDollarSign },
   { id: "upload", path: "/upload", title: "绘图新增", icon: FileUp },
   { id: "drawing", path: "/drawing", title: "领图", icon: Images },
-  { id: "orders", path: "/orders", title: "下单确认", icon: PackageCheck },
 ];
 
 export const routesById = Object.fromEntries(appRoutes.map((route) => [route.id, route]));

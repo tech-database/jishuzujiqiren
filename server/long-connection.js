@@ -6,7 +6,6 @@ import { requireCreateCommandTableKey } from "./bot-command-parser.js";
 import {
   claimDrawingOwners,
   completeDrawings,
-  confirmDrawingOrders,
   createBitableRecords,
   extractMaterialCodes,
   queryUnclaimedDrawings,
@@ -107,7 +106,6 @@ async function runOnce(message, commandName, handler) {
 const commandHandlers = createLongConnectionCommandHandlers({
   claimDrawingOwners,
   completeDrawings,
-  confirmDrawingOrders,
   extractMaterialCodes,
   queryUnclaimedDrawings,
   sendReply,

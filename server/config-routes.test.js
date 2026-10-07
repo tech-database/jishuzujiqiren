@@ -17,6 +17,7 @@ const runtimeConfigKeys = [
   "FEISHU_QUOTE_BITABLE_TABLE_ID",
   "FIELD_MAP_JSON",
   "NAME_ID_MAP_JSON",
+  "BUSINESS_REGION_MAP_JSON",
   "FEISHU_REPLY_ENABLED",
 ];
 
@@ -74,7 +75,11 @@ function createRoutes(overrides = {}) {
     readAdminSession: overrides.readAdminSession || (() => null),
     requireAdminAccess,
     services: {
-      getConfigStatus: () => ({ ready: true, nameIdMap: { 张三: "user-1" } }),
+      getConfigStatus: () => ({
+        ready: true,
+        nameIdMap: { 张三: "user-1" },
+        businessRegionMap: { 李艳: "国际贸易" },
+      }),
       invalidateAllFeishuCaches: () => {},
       ...overrides.services,
     },
@@ -100,6 +105,7 @@ test("config GET redacts secrets unless an admin session exists", async () => {
     assert.equal(adminResponse.body.adminAuthenticated, true);
     assert.equal(adminResponse.body.config.appId, "visible-only-to-admin");
     assert.deepEqual(adminResponse.body.config.nameIdMap, { 张三: "user-1" });
+    assert.deepEqual(adminResponse.body.config.businessRegionMap, { 李艳: "国际贸易" });
 
     const postHandlers = admin.routes.get("POST /api/config");
     assert.equal(postHandlers[0], admin.requireAdminAccess);
@@ -135,6 +141,7 @@ test("config POST merges the existing env file and refreshes runtime config", as
         quoteBitableTableId: "quote-table",
         fieldMap: { materialCode: "料号" },
         nameIdMap: { 张三: "user-1" },
+        businessRegionMap: { 李艳: "国际贸易" },
         replyEnabled: true,
       },
     });
@@ -149,6 +156,7 @@ test("config POST merges the existing env file and refreshes runtime config", as
     assert.match(saved, /FEISHU_QUOTE_BITABLE_APP_TOKEN='quote-app'/);
     assert.match(saved, /FEISHU_QUOTE_BITABLE_TABLE_ID='quote-table'/);
     assert.match(saved, /FEISHU_REPLY_ENABLED='true'/);
+    assert.match(saved, /BUSINESS_REGION_MAP_JSON=.*国际贸易/);
   } finally {
     restoreEnvironment(previousEnvironment);
     await rm(tempDir, { recursive: true, force: true });

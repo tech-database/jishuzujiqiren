@@ -26,3 +26,12 @@ export function formatAnalyticsMetric(value, suffix = "") {
     maximumFractionDigits: 1,
   }).format(Number(value))}${suffix}`;
 }
+
+export function formatAnalyticsHours(minutes) {
+  if (minutes === null || minutes === undefined) return "暂无数据";
+  const value = Number(minutes);
+  if (!Number.isFinite(value)) return "暂无数据";
+  return `${new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: 2,
+  }).format(value / 60)} 小时`;
+}

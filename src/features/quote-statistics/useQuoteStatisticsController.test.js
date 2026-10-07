@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  assertSingleQuoteWrite,
+  assertQuoteWriteCount,
   buildQuoteFileQueue,
   getUnreadQuoteFiles,
   mergeQuotePreviewRows,
@@ -29,15 +29,30 @@ test("marks an existing preview as read and only the newly added file as pending
   );
 });
 
-test("accepts only an explicit one-record quote write result", () => {
-  assert.doesNotThrow(() => assertSingleQuoteWrite({ count: 1 }));
+test("exposes a file preview error in the upload queue", () => {
+  const files = [{ name: "empty.xlsx", size: 10, lastModified: 1 }];
+  const previewRows = [{
+    key: "empty.xlsx:10:1",
+    status: "preview_error",
+    error: "表格中没有可写入的数据行。",
+  }];
+
+  assert.deepEqual(
+    buildQuoteFileQueue(files, previewRows).map(({ label, error }) => ({ label, error })),
+    [{ label: "读取失败", error: "表格中没有可写入的数据行。" }],
+  );
+});
+
+test("accepts only the expected quote or order write count", () => {
+  assert.doesNotThrow(() => assertQuoteWriteCount({ count: 1 }));
+  assert.doesNotThrow(() => assertQuoteWriteCount({ count: 3 }, 3));
   assert.throws(
-    () => assertSingleQuoteWrite({ count: 0 }),
+    () => assertQuoteWriteCount({ count: 0 }),
     /应创建 1 条记录，实际创建 0 条/,
   );
   assert.throws(
-    () => assertSingleQuoteWrite({ count: 2 }),
-    /应创建 1 条记录，实际创建 2 条/,
+    () => assertQuoteWriteCount({ count: 2 }, 3),
+    /应创建 3 条记录，实际创建 2 条/,
   );
 });
 

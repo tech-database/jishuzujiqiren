@@ -9,6 +9,7 @@ export function getQuoteDashboard({ signal, startDate, endDate } = {}) {
 }
 
 export function getInitialQuoteDashboard({
+  force = false,
   signal,
   today,
   monthStartDate,
@@ -19,5 +20,6 @@ export function getInitialQuoteDashboard({
     monthStartDate,
     monthEndDate,
   });
+  if (force) search.set("force", "1");
   return getJson(`/api/quote-dashboard/initial?${search.toString()}`, { signal });
 }

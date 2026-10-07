@@ -63,3 +63,36 @@ test("initial quote dashboard aggregates today and month in one request", async 
     endDate: "2026-07-31",
   });
 });
+
+test("forced initial dashboard refresh invalidates the quote record cache", async () => {
+  const routes = new Map();
+  let invalidations = 0;
+  const app = {
+    get(path, handler) {
+      routes.set(`GET ${path}`, handler);
+    },
+  };
+  createQuoteDashboardRoutes({
+    services: {
+      invalidateQuoteRecordCache: () => { invalidations += 1; },
+      queryQuoteDashboard: async () => ({}),
+    },
+  }).registerRoutes(app);
+
+  const response = {
+    set() { return this; },
+    status() { return this; },
+    json(value) { this.body = value; return this; },
+  };
+  await routes.get("GET /api/quote-dashboard/initial")({
+    query: {
+      force: "1",
+      today: "2026-07-30",
+      monthStartDate: "2026-07-01",
+      monthEndDate: "2026-07-31",
+    },
+  }, response);
+
+  assert.equal(invalidations, 1);
+  assert.equal(response.body.ok, true);
+});

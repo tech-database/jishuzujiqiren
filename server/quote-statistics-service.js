@@ -1,4 +1,5 @@
 import { parseShanghaiDateBoundary } from "./date-range.js";
+import { regionForBusinessName } from "./runtime-config.js";
 
 export const quoteOfficerCategories = Object.freeze({
   杨利伟: "胶板",
@@ -23,8 +24,8 @@ export function normalizeManualQuoteEntry(input = {}) {
   const category = String(input.category || "").trim();
   const quoteOfficer = String(input.quoteOfficer || "").trim();
   const date = String(input.date || "").trim();
-  const region = String(input.region || "").trim();
   const business = String(input.business || "").trim();
+  const materialCode = String(input.materialCode || "").trim();
   const quantity = Number(input.quantity);
   const unitPrice = Number(input.unitPrice);
 
@@ -32,8 +33,10 @@ export function normalizeManualQuoteEntry(input = {}) {
   if (!manualEntryCategories.has(category)) throw new Error("请选择有效类别");
   if (!quoteOfficerCategories[quoteOfficer]) throw new Error("请选择有效报价员");
   if (parseShanghaiDateBoundary(date) === null) throw new Error("请选择有效日期");
-  if (!region) throw new Error("请填写区域");
   if (!business) throw new Error("请填写业务");
+  if (!materialCode) throw new Error("请填写料件编号");
+  const region = regionForBusinessName(business);
+  if (!region) throw new Error(`人员区域中未找到业务“${business}”，请先新增人员区域`);
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("数量必须大于 0");
   if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error("单价不能小于 0");
 
@@ -44,9 +47,109 @@ export function normalizeManualQuoteEntry(input = {}) {
     报价员: quoteOfficer,
     区域: region,
     业务: business,
+    料件编号: materialCode,
     数量: quantity,
     单价: unitPrice,
     总价: Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100,
+  };
+}
+
+function firstRecordValue(record, aliases) {
+  for (const alias of aliases) {
+    const value = record?.[alias];
+    if (value !== null && value !== undefined && String(value).trim() !== "") return value;
+  }
+  return "";
+}
+
+function compactSummaryValue(records, fieldName, suffix) {
+  const values = [...new Set(records.map((record) => String(record[fieldName] || "").trim()).filter(Boolean))];
+  if (values.length === 1) return values[0];
+  return `${values.length}${suffix}`;
+}
+
+export function normalizeOrderRecords(records, {
+  quoteOfficer,
+  quoteDate,
+  now = new Date(),
+} = {}) {
+  if (!Array.isArray(records) || records.length === 0) {
+    throw new Error("下单清单中没有可写入的数据行");
+  }
+  const officer = String(quoteOfficer || "").trim();
+  const fallbackCategory = quoteOfficerCategories[officer];
+  if (!fallbackCategory) throw new Error("请选择有效的报价员");
+  const resolvedQuoteDate = String(quoteDate || shanghaiDateString(now)).trim();
+  if (parseShanghaiDateBoundary(resolvedQuoteDate) === null) {
+    throw new Error("请选择有效的写入日期");
+  }
+
+  const normalizedRecords = records.map((record, index) => {
+    const rowNumber = index + 2;
+    const business = String(firstRecordValue(record, ["业务姓名", "业务", "业务员"])).trim();
+    const materialCode = String(firstRecordValue(record, ["料件编号", "料号", "物料编号"])).trim();
+    const category = String(firstRecordValue(record, ["类别"]) || fallbackCategory).trim();
+    const quantity = parseNumber(
+      firstRecordValue(record, ["订购总数量", "数量"]),
+      "订购总数量",
+      rowNumber,
+    );
+    const unitPrice = parseNumber(
+      firstRecordValue(record, ["销售单价", "单价"]),
+      "销售单价",
+      rowNumber,
+      { money: true },
+    );
+
+    if (!business) throw new Error(`第 ${rowNumber} 行缺少「业务姓名」`);
+    if (!materialCode) throw new Error(`第 ${rowNumber} 行缺少「料件编号」`);
+    if (!manualEntryCategories.has(category)) {
+      throw new Error(`第 ${rowNumber} 行「类别」无效：${category}`);
+    }
+    if (quantity === null || quantity <= 0) {
+      throw new Error(`第 ${rowNumber} 行「订购总数量」必须大于 0`);
+    }
+    if (unitPrice === null || unitPrice < 0) {
+      throw new Error(`第 ${rowNumber} 行「销售单价」不能小于 0`);
+    }
+    const region = regionForBusinessName(business);
+    if (!region) {
+      throw new Error(`第 ${rowNumber} 行业务“${business}”未在人员区域中配置，请先新增人员区域`);
+    }
+
+    return {
+      类型: "下单",
+      报价日期: resolvedQuoteDate,
+      类别: category,
+      报价员: officer,
+      区域: region,
+      业务: business,
+      料件编号: materialCode,
+      数量: quantity,
+      单价: unitPrice,
+      总价: Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100,
+    };
+  });
+
+  const summary = {
+    类型: "下单",
+    报价日期: resolvedQuoteDate,
+    类别: compactSummaryValue(normalizedRecords, "类别", "个类别"),
+    报价员: officer,
+    区域: compactSummaryValue(normalizedRecords, "区域", "个区域"),
+    业务: compactSummaryValue(normalizedRecords, "业务", "名业务"),
+    单价: Math.round((normalizedRecords.reduce((sum, record) => sum + record.单价, 0) + Number.EPSILON) * 100) / 100,
+    总价: Math.round((normalizedRecords.reduce((sum, record) => sum + record.总价, 0) + Number.EPSILON) * 100) / 100,
+  };
+
+  return {
+    summary,
+    records: normalizedRecords,
+    recordCount: normalizedRecords.length,
+    sourceRowCount: normalizedRecords.length,
+    ignoredUnpricedRowCount: 0,
+    ignoredInvalidRowCount: 0,
+    warnings: [],
   };
 }
 
@@ -90,24 +193,6 @@ function uniqueRecordValue(records, fieldName) {
   if (values.length === 0) throw new Error(`清单中未找到「${fieldName}」`);
   if (values.length > 1) {
     throw new Error(`清单中存在多个「${fieldName}」值：${values.join("、")}`);
-  }
-  return values[0];
-}
-
-function quoteRegionValue(records, warnings) {
-  const values = [
-    ...new Set(
-      records
-        .map((record) => String(record?.["区域"] ?? "").trim())
-        .filter(Boolean),
-    ),
-  ];
-  if (values.length === 0) {
-    warnings.push("清单中未找到「区域」，已按“未填写”处理");
-    return "未填写";
-  }
-  if (values.length > 1) {
-    throw new Error(`清单中存在多个「区域」值：${values.join("、")}`);
   }
   return values[0];
 }
@@ -203,7 +288,9 @@ export function summarizeQuoteRecords(records, {
   if (validRecords.length === 0) {
     throw new Error(`清单中没有可统计的有效报价行。${warnings.join("；")}`);
   }
-  const region = quoteRegionValue(validRecords, warnings);
+  const business = uniqueRecordValue(validRecords, "业务");
+  const region = regionForBusinessName(business);
+  if (!region) throw new Error(`人员区域中未找到业务“${business}”，请先新增人员区域`);
 
   return {
     summary: {
@@ -212,7 +299,7 @@ export function summarizeQuoteRecords(records, {
       类别: category,
       报价员: officer,
       区域: region,
-      业务: uniqueRecordValue(validRecords, "业务"),
+      业务: business,
       单价: sumMoneyField(validRecords, "销售单价"),
       总价: calculateQuoteTotal(validRecords),
     },

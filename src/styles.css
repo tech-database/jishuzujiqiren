@@ -6,6 +6,7 @@
 @import "./styles/features/connection.css";
 @import "./styles/features/commands.css";
 @import "./styles/features/people.css";
+@import "./styles/features/business-regions.css";
 @import "./styles/features/drawing.css";
 @import "./styles/features/import.css";
 @import "./styles/features/quote-statistics.css";

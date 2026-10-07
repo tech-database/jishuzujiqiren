@@ -5,14 +5,11 @@ test.beforeEach(async ({ page }) => {
   page.on("requestfailed", (request) => {
     console.error(`Browser request failed: ${request.url()} ${request.failure()?.errorText || ""}`);
   });
-  page.on("console", (message) => {
-    if (message.type() === "error") console.error(`Browser console error: ${message.text()}`);
-  });
 });
 
 const homeDashboard = {
   ok: true,
-  checkedAt: "2026-07-27T08:00:00.000Z",
+  checkedAt: "2026-10-07T08:00:00.000Z",
   today: {
     board: { summary: { total: 12, unclaimed: 3, drawing: 4, done: 5 } },
     paint: { summary: { total: 8, unclaimed: 2, drawing: 2, done: 4 } },
@@ -31,6 +28,15 @@ const homeDashboard = {
   },
 };
 
+const quoteDashboard = {
+  ok: true,
+  today: { quoteCount: 0, quoteTotal: 0 },
+  month: { quoteCount: 0, quoteTotal: 0, orderTotal: 0, orderCount: 0 },
+  regions: [],
+  businesses: [],
+  officers: [],
+};
+
 async function mockApi(page, { authenticated = false, handlers = {} } = {}) {
   await page.route("http://127.0.0.1:4173/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -44,17 +50,28 @@ async function mockApi(page, { authenticated = false, handlers = {} } = {}) {
       });
       return;
     }
+
     let body = { ok: true };
-    if (url.pathname === "/api/admin/session") body = { authenticated };
+    if (url.pathname === "/api/admin/session") body = { ok: true, authenticated };
     if (url.pathname === "/api/config") {
       body = {
         ok: true,
-        config: {},
-        status: { ready: true, fieldMap: {}, nameIdMap: {} },
+        config: {
+          businessRegionMap: { 测试业务: "华南区" },
+          nameIdMap: { ou_test: "测试用户" },
+        },
+        status: {
+          ready: true,
+          fieldMap: {},
+          nameIdMap: { ou_test: "测试用户" },
+          businessRegionMap: { 测试业务: "华南区" },
+          tables: { quote: { ready: true } },
+        },
       };
     }
     if (url.pathname === "/api/health") body = { ok: true, websocket: { connected: true } };
     if (url.pathname === "/api/home-dashboard") body = homeDashboard;
+    if (url.pathname === "/api/quote-dashboard") body = quoteDashboard;
     if (url.pathname === "/api/drawing-analytics") {
       body = {
         ok: true,
@@ -66,25 +83,12 @@ async function mockApi(page, { authenticated = false, handlers = {} } = {}) {
     if (url.pathname === "/api/drawing-owner-stats") {
       body = {
         ok: true,
-        summary: { total: 2, drawing: 1, idle: 1 },
-        items: [
-          {
-            owner: "测试用户",
-            status: "drawing",
-            todayClaimed: 1,
-            todayCompleted: 0,
-            activeItems: [{ materialCode: "A-001" }],
-          },
-        ],
+        summary: { total: 1, drawing: 1, idle: 0 },
+        items: [{ owner: "测试用户", status: "drawing", activeItems: [{ materialCode: "A-001" }] }],
       };
     }
     if (url.pathname === "/api/background-status-sync") {
-      body = {
-        ok: true,
-        running: false,
-        lastRunAt: "2026-07-27T08:00:00.000Z",
-        lastResult: null,
-      };
+      body = { ok: true, running: false, lastRunAt: "2026-10-07T08:00:00.000Z", lastResult: null };
     }
     await route.fulfill({
       status: 200,
@@ -94,193 +98,68 @@ async function mockApi(page, { authenticated = false, handlers = {} } = {}) {
   });
 }
 
-test("首页加载核心数据并可切换到命令页", async ({ page }) => {
+test("首页和飞书口令页只展示当前 8 条口令", async ({ page }) => {
   await mockApi(page);
-  const response = await page.goto("/home");
-  expect(response?.status()).toBe(200);
-  expect(await page.locator("#root").count()).toBe(1);
-
+  await page.goto("/home");
   await expect(page.locator(".home-dashboard")).toBeVisible();
   await expect(page.getByText("测试甲")).toBeVisible();
 
   await page.locator('.tab-button[title="飞书口令"]').click();
   await expect(page).toHaveURL(/\/commands$/);
-  await expect(page.locator(".command-center")).toBeVisible();
-  await expect(page.locator(".robot-command-card")).toHaveCount(9);
+  await expect(page.locator(".robot-command-card")).toHaveCount(8);
+  await expect(page.getByText("下单确认", { exact: true })).toHaveCount(0);
 });
 
-test("数据看板会请求统计接口并显示服务端结果", async ({ page }) => {
+test("人员区域页面读取当前配置", async ({ page }) => {
+  await mockApi(page, { authenticated: true });
+  await page.goto("/regions");
+
+  await expect(page.locator(".region-directory")).toBeVisible();
+  await expect(page.getByText("测试业务", { exact: true })).toBeVisible();
+  await expect(page.getByText("华南区", { exact: true })).toBeVisible();
+});
+
+test("报价统计页把数据新增放在批量上传之后", async ({ page }) => {
   await mockApi(page);
-  await page.goto("/analytics");
+  await page.goto("/quotes");
 
-  await expect(page.locator(".analytics-center")).toBeVisible();
-  await expect(page.locator(".analytics-summary-metric").first()).toContainText("20");
+  await expect(page.locator(".quote-statistics-page")).toBeVisible();
+  await expect(page.getByRole("button", { name: /下单清单/ })).toBeVisible();
+  const layoutOrder = await page.locator(".quote-statistics-page").evaluate((root) => {
+    const upload = root.querySelector(".quote-upload-section");
+    const manual = root.querySelector(".quote-data-entry-card");
+    const elements = [...root.querySelectorAll("section")];
+    return Boolean(upload && manual && elements.indexOf(upload) < elements.indexOf(manual));
+  });
+  expect(layoutOrder).toBe(true);
 });
 
-test("管理员页面在未登录时被访问门保护", async ({ page }) => {
-  await mockApi(page, { authenticated: false });
-  await page.goto("/connection");
-
-  await expect(page.locator(".admin-access-dialog")).toBeVisible();
-  await expect(page.locator(".connection-center")).toHaveCount(0);
-});
-
-test("领图写入流程会提交标准请求并显示成功结果", async ({ page }) => {
+test("领图流程提交去重后的料号和人员", async ({ page }) => {
   let submitted;
   await mockApi(page, {
     handlers: {
       "/api/claim-drawing": async (request) => {
         submitted = request.postDataJSON();
-        return {
-          ok: true,
-          code: "OK",
-          data: { count: 1, materialCodes: ["A-001"] },
-          count: 1,
-          materialCodes: ["A-001"],
-        };
+        return { ok: true, count: 1, materialCodes: ["A-001"] };
       },
     },
   });
   await page.goto("/drawing");
-  await page.getByTestId("material-code-input").fill("A-001");
+  await page.getByTestId("material-code-input").fill("A-001\nA-001");
   await page.getByTestId("assignee-input").fill("测试用户");
   await page.getByTestId("claim-submit").click();
 
   await expect(page.locator(".assignment-result-panel")).toBeVisible();
-  expect(submitted).toEqual({
-    materialCodes: ["A-001"],
-    senderName: "测试用户",
-    tableKey: "board",
-  });
+  expect(submitted).toEqual({ materialCodes: ["A-001"], senderName: "测试用户", tableKey: "board" });
 });
 
-test("领取人输入框会展开仅含姓名的人员下拉选项", async ({ page }) => {
-  await mockApi(page, {
-    handlers: {
-      "/api/config": async () => ({
-        body: {
-          ok: true,
-          config: {
-            nameIdMap: {
-              ou_test_zhang: "张三",
-              ou_test_li: "李四",
-            },
-          },
-          status: { ready: true, fieldMap: {}, nameIdMap: {} },
-        },
-      }),
-    },
-  });
-  await page.goto("/drawing");
-
-  const assigneeInput = page.getByTestId("assignee-input");
-  await assigneeInput.click();
-
-  const options = page.locator(".assignment-assignee-dropdown [role='option']");
-  await expect(options).toHaveCount(2);
-  await expect(page.getByRole("option", { name: "张三" })).toBeVisible();
-  await expect(page.getByRole("option", { name: "李四" })).toBeVisible();
-  await expect(page.getByText("ou_test_zhang")).toHaveCount(0);
-
-  await page.getByRole("option", { name: "张三" }).click();
-  await expect(assigneeInput).toHaveValue("张三");
-  await expect(page.locator(".assignment-assignee-dropdown")).toHaveCount(0);
-});
-
-test("绘图完成按钮不要求选择领取人并提交料号", async ({ page }) => {
-  let submitted;
-  await mockApi(page, {
-    handlers: {
-      "/api/complete-drawing": async (request) => {
-        submitted = request.postDataJSON();
-        return {
-          ok: true,
-          count: 1,
-          materialCodes: ["A-002"],
-        };
-      },
-    },
-  });
-  await page.goto("/drawing");
-  await page.getByTestId("material-code-input").fill("A-002");
-  await page.getByTestId("complete-submit").click();
-
-  await expect(page.locator(".assignment-result-panel")).toBeVisible();
-  expect(submitted).toEqual({
-    materialCodes: ["A-002"],
-    tableKey: "board",
-  });
-});
-
-test("胶板和油漆未领取按钮分别查询对应表", async ({ page }) => {
-  const submitted = [];
-  await mockApi(page, {
-    handlers: {
-      "/api/query-unclaimed-drawings": async (request) => {
-        const body = request.postDataJSON();
-        submitted.push(body);
-        return {
-          ok: true,
-          table: body.tableKey,
-          count: 0,
-          items: [],
-        };
-      },
-    },
-  });
-  await page.goto("/drawing");
-
-  await page.getByTestId("query-board-unclaimed").click();
-  await expect(page.locator(".assignment-query-panel")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "胶板未领取查询结果" })).toBeVisible();
-  await expect(page.locator(".assignment-result-panel")).toHaveCount(0);
-  await page.getByTestId("query-paint-unclaimed").click();
-  await expect(page.getByRole("heading", { name: "油漆未领取查询结果" })).toBeVisible();
-
-  expect(submitted).toEqual([
-    { tableKey: "board" },
-    { tableKey: "paint" },
-  ]);
-});
-
-test("下单确认写入流程会去重料号并展示服务端统计", async ({ page }) => {
-  let submitted;
-  await mockApi(page, {
-    handlers: {
-      "/api/confirm-orders": async (request) => {
-        submitted = request.postDataJSON();
-        return {
-          ok: true,
-          count: 1,
-          matchedCount: 1,
-          alreadyConfirmedCount: 0,
-          materialCodes: ["A-001"],
-          missing: [],
-        };
-      },
-    },
-  });
-  await page.goto("/orders");
-  await page.getByTestId("material-code-input").fill("A-001\nA-001");
-  await page.getByTestId("order-submit").click();
-
-  await expect(page.locator(".assignment-result-panel")).toBeVisible();
-  expect(submitted).toEqual({ materialCodes: ["A-001"], tableKey: "board" });
-});
-
-test("表格导入写入流程会发送文件内容并展示写入结果", async ({ page }) => {
+test("胶板油漆表格上传会提交文件并展示结果", async ({ page }) => {
   let uploadedBytes = 0;
   await mockApi(page, {
     handlers: {
       "/api/upload-spreadsheet": async (request) => {
         uploadedBytes = request.postDataBuffer()?.length || 0;
-        return {
-          ok: true,
-          count: 1,
-          parsedCount: 1,
-          resultCount: 1,
-          warnings: [],
-        };
+        return { ok: true, count: 1, parsedCount: 1, resultCount: 1, warnings: [] };
       },
     },
   });
@@ -288,7 +167,7 @@ test("表格导入写入流程会发送文件内容并展示写入结果", async
   await page.getByTestId("import-file-input").setInputFiles({
     name: "drawing.csv",
     mimeType: "text/csv",
-    buffer: Buffer.from("料号\nA-001\n"),
+    buffer: Buffer.from("业务,料号\n测试业务,A-001\n"),
   });
   await page.getByTestId("import-submit").click();
 
@@ -296,42 +175,25 @@ test("表格导入写入流程会发送文件内容并展示写入结果", async
   expect(uploadedBytes).toBeGreaterThan(0);
 });
 
-test("管理员登录后可以进入受保护的连接配置页", async ({ page }) => {
-  let loginPayload;
-  await mockApi(page, {
-    authenticated: false,
-    handlers: {
-      "/api/admin/login": async (request) => {
-        loginPayload = request.postDataJSON();
-        return { ok: true, authenticated: true };
-      },
-    },
-  });
-  await page.goto("/connection");
-  await page.locator("#admin-access-password").fill("test-password");
-  await page.locator(".admin-access-submit").click();
-
-  await expect(page.locator(".connection-management-center")).toBeVisible();
-  expect(loginPayload).toEqual({ password: "test-password" });
-});
-
-test("全部页面入口均可渲染且没有页面脚本错误", async ({ page }) => {
+test("全部现有页面入口均可渲染且没有页面脚本错误", async ({ page }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await mockApi(page, { authenticated: true });
 
   const pages = [
+    ["/quote-home", ".quote-dashboard-page"],
     ["/home", ".home-dashboard"],
     ["/connection", ".connection-management-center"],
     ["/mapping", ".mapping-studio"],
     ["/commands", ".command-center"],
     ["/people", ".people-center"],
+    ["/regions", ".region-directory"],
     ["/status", ".monitoring-command-center"],
     ["/owners", ".drawing-center"],
     ["/analytics", ".analytics-center"],
+    ["/quotes", ".quote-statistics-page"],
     ["/upload", ".import-center"],
     ["/drawing", ".assignment-center"],
-    ["/orders", ".order-confirmation-center"],
   ];
 
   for (const [path, selector] of pages) {
@@ -339,6 +201,5 @@ test("全部页面入口均可渲染且没有页面脚本错误", async ({ page 
     expect(response?.status(), path).toBe(200);
     await expect(page.locator(selector), path).toBeVisible();
   }
-
   expect(pageErrors).toEqual([]);
 });

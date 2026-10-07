@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   analyticsRangeError,
+  formatAnalyticsHours,
   formatAnalyticsMetric,
   initialAnalyticsDateRange,
 } from "./analytics.model.js";
@@ -27,4 +28,7 @@ test("rejects reversed analytics date ranges", () => {
 test("formats analytics values and unavailable data", () => {
   assert.equal(formatAnalyticsMetric(12.34, " 分"), "12.3 分");
   assert.equal(formatAnalyticsMetric(null), "暂无数据");
+  assert.equal(formatAnalyticsHours(22), "0.37 小时");
+  assert.equal(formatAnalyticsHours(90), "1.5 小时");
+  assert.equal(formatAnalyticsHours(null), "暂无数据");
 });

@@ -1,8 +1,11 @@
 import { apiErrorCodes, sendError, successResponse } from "./api-response.js";
+import { invalidateBitableRecordCache } from "./bitable-client.js";
 import { queryQuoteDashboard } from "./quote-dashboard-service.js";
 
 export function createQuoteDashboardRoutes({ services = {}, now = () => new Date() } = {}) {
   const loadQuoteDashboard = services.queryQuoteDashboard || queryQuoteDashboard;
+  const clearQuoteRecordCache = services.invalidateQuoteRecordCache
+    || (() => invalidateBitableRecordCache("quote"));
 
   function registerRoutes(app) {
     app.get("/api/quote-dashboard/initial", async (req, res) => {
@@ -10,6 +13,7 @@ export function createQuoteDashboardRoutes({ services = {}, now = () => new Date
         res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
         res.set("Pragma", "no-cache");
         res.set("Expires", "0");
+        if (req.query.force === "1") clearQuoteRecordCache();
         const requestTime = now();
         const [today, month] = await Promise.all([
           loadQuoteDashboard({

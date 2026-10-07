@@ -55,12 +55,12 @@ export function RobotStatusWidget({
     mapping: "字段映射",
     commands: "飞书口令",
     people: "人员映射",
+    regions: "人员区域",
     status: "状态检测",
     analytics: "数据看板",
     owners: "绘图人动态",
     upload: "数据导入",
     drawing: "领图登记",
-    orders: "下单确认",
   };
   const hasRangeCompletion = typeof statusResult?.summary?.done === "number";
   const completed = statusResult?.summary?.done ?? ownerStats?.summary?.todayCompleted ?? null;

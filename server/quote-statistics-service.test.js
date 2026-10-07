@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeManualQuoteEntry,
+  normalizeOrderRecords,
   normalizeQuoteStatisticEntryType,
   quoteOfficerCategories,
   summarizeQuoteRecords,
@@ -25,7 +26,8 @@ test("normalizes manual quote and order entries for the shared statistics table"
       quoteOfficer: "胡燕绮",
       date: "2026-07-30",
       region: "华东区",
-      business: "张三",
+      business: "李艳",
+      materialCode: "J-TEST-001",
       quantity: "3",
       unitPrice: "125.50",
     }),
@@ -34,8 +36,9 @@ test("normalizes manual quote and order entries for the shared statistics table"
       报价日期: "2026-07-30",
       类别: "软体",
       报价员: "胡燕绮",
-      区域: "华东区",
-      业务: "张三",
+      区域: "国际贸易",
+      业务: "李艳",
+      料件编号: "J-TEST-001",
       数量: 3,
       单价: 125.5,
       总价: 376.5,
@@ -48,11 +51,90 @@ test("normalizes manual quote and order entries for the shared statistics table"
       quoteOfficer: "杨利伟",
       date: "2026-02-30",
       region: "华东区",
-      business: "张三",
+      business: "李艳",
+      materialCode: "J-TEST-001",
       quantity: 1,
       unitPrice: 100,
     }),
     /有效日期/,
+  );
+});
+
+test("normalizes every order sheet row into an independent statistics record", () => {
+  const result = normalizeOrderRecords([
+    {
+      业务姓名: "李艳",
+      料件编号: "J-001",
+      订购总数量: "2",
+      销售单价: "1,200.50",
+      销售总价: "999999",
+      类别: "胶板",
+    },
+    {
+      业务姓名: "谢广",
+      料件编号: "J-002",
+      订购总数量: 3,
+      销售单价: 100,
+      类别: "油漆",
+    },
+  ], {
+    quoteOfficer: "杨利伟",
+    quoteDate: "2026-10-06",
+  });
+
+  assert.equal(result.recordCount, 2);
+  assert.equal(result.sourceRowCount, 2);
+  assert.deepEqual(result.records, [
+    {
+      类型: "下单",
+      报价日期: "2026-10-06",
+      类别: "胶板",
+      报价员: "杨利伟",
+      区域: "国际贸易",
+      业务: "李艳",
+      料件编号: "J-001",
+      数量: 2,
+      单价: 1200.5,
+      总价: 2401,
+    },
+    {
+      类型: "下单",
+      报价日期: "2026-10-06",
+      类别: "油漆",
+      报价员: "杨利伟",
+      区域: "西南区",
+      业务: "谢广",
+      料件编号: "J-002",
+      数量: 3,
+      单价: 100,
+      总价: 300,
+    },
+  ]);
+  assert.equal(result.summary.类别, "2个类别");
+  assert.equal(result.summary.区域, "2个区域");
+  assert.equal(result.summary.业务, "2名业务");
+  assert.equal(result.summary.总价, 2701);
+});
+
+test("order rows require a configured personnel region and valid template fields", () => {
+  assert.throws(
+    () => normalizeOrderRecords([{
+      业务姓名: "不存在的业务",
+      料件编号: "J-001",
+      订购总数量: 1,
+      销售单价: 100,
+      类别: "胶板",
+    }], { quoteOfficer: "杨利伟", quoteDate: "2026-10-06" }),
+    /未在人员区域中配置/,
+  );
+  assert.throws(
+    () => normalizeOrderRecords([{
+      业务姓名: "李艳",
+      订购总数量: 1,
+      销售单价: 100,
+      类别: "胶板",
+    }], { quoteOfficer: "杨利伟", quoteDate: "2026-10-06" }),
+    /缺少「料件编号」/,
   );
 });
 
@@ -61,13 +143,13 @@ test("summarizes one quote sheet into one table record", () => {
     [
       {
         区域: "华南区",
-        业务: "张三",
+        业务: "李艳",
         数量: 2,
         销售单价: "1,200.50",
       },
       {
         区域: "华南区",
-        业务: "张三",
+        业务: "李艳",
         数量: 3,
         销售单价: 300,
       },
@@ -85,8 +167,8 @@ test("summarizes one quote sheet into one table record", () => {
       报价日期: "2026-07-27",
       类别: "胶板",
       报价员: "杨利伟",
-      区域: "华南区",
-      业务: "张三",
+      区域: "国际贸易",
+      业务: "李艳",
       单价: 1500.5,
       总价: 3301,
     },
@@ -119,7 +201,7 @@ test("ignores product rows that do not have a sales unit price", () => {
 
 test("writes the selected uploaded sheet type into the summarized record", () => {
   const result = summarizeQuoteRecords(
-    [{ 区域: "华北区", 业务: "张三", 数量: 2, 销售单价: 100 }],
+    [{ 区域: "华北区", 业务: "李艳", 数量: 2, 销售单价: 100 }],
     {
       entryType: "下单",
       quoteOfficer: "杨利伟",
@@ -150,7 +232,7 @@ test("skips a priced row with invalid quantity instead of rejecting the whole sh
   assert.equal(result.summary.总价, 134967.56);
 });
 
-test("uses 未填写 with a warning when quote region is absent", () => {
+test("uses the personnel region map when the quote sheet region is absent", () => {
   const result = summarizeQuoteRecords(
     [{ 业务: "谢广", 数量: 2, 销售单价: 300 }],
     {
@@ -159,11 +241,9 @@ test("uses 未填写 with a warning when quote region is absent", () => {
     },
   );
 
-  assert.equal(result.summary["区域"], "未填写");
+  assert.equal(result.summary["区域"], "西南区");
   assert.equal(result.summary["总价"], 600);
-  assert.deepEqual(result.warnings, [
-    "清单中未找到「区域」，已按“未填写”处理",
-  ]);
+  assert.deepEqual(result.warnings, []);
 });
 
 test("maps every supported quote officer to the configured category", () => {
@@ -175,28 +255,26 @@ test("maps every supported quote officer to the configured category", () => {
   });
 });
 
-test("rejects invalid officers, missing calculation columns and mixed sheet metadata", () => {
-  const base = [{ 区域: "华南区", 业务: "张三", 数量: 2, 销售单价: 1 }];
+test("rejects invalid officers and missing calculation columns while ignoring sheet regions", () => {
+  const base = [{ 区域: "华南区", 业务: "李艳", 数量: 2, 销售单价: 1 }];
 
   assert.throws(
     () => summarizeQuoteRecords(base, { quoteOfficer: "其他人" }),
     /请选择有效的报价员/,
   );
   assert.throws(
-    () => summarizeQuoteRecords([{ 区域: "华南区", 业务: "张三", 数量: 2 }], {
+    () => summarizeQuoteRecords([{ 区域: "华南区", 业务: "李艳", 数量: 2 }], {
       quoteOfficer: "邓翠萍",
     }),
     /未找到「销售单价」列/,
   );
+  const mixedRegions = summarizeQuoteRecords([
+    ...base,
+    { 区域: "华东区", 业务: "李艳", 数量: 2, 销售单价: 3 },
+  ], { quoteOfficer: "朱海韵" });
+  assert.equal(mixedRegions.summary.区域, "国际贸易");
   assert.throws(
-    () => summarizeQuoteRecords([
-      ...base,
-      { 区域: "华东区", 业务: "张三", 数量: 2, 销售单价: 3 },
-    ], { quoteOfficer: "朱海韵" }),
-    /存在多个「区域」值/,
-  );
-  assert.throws(
-    () => summarizeQuoteRecords([{ 区域: "华南区", 业务: "张三", 销售单价: 3 }], {
+    () => summarizeQuoteRecords([{ 区域: "华南区", 业务: "李艳", 销售单价: 3 }], {
       quoteOfficer: "胡燕绮",
     }),
     /未找到「数量」列/,

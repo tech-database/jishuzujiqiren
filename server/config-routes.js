@@ -25,6 +25,7 @@ function publicConfig(readConfigStatus) {
     quoteBitableTableId: process.env.FEISHU_QUOTE_BITABLE_TABLE_ID || "",
     replyEnabled: process.env.FEISHU_REPLY_ENABLED === "true",
     nameIdMap: readConfigStatus().nameIdMap || {},
+    businessRegionMap: readConfigStatus().businessRegionMap || {},
   };
 }
 
@@ -41,6 +42,7 @@ function buildRuntimeConfigEntries(config, port) {
     FEISHU_QUOTE_BITABLE_TABLE_ID: config.quoteBitableTableId || "",
     FIELD_MAP_JSON: JSON.stringify(config.fieldMap || {}),
     NAME_ID_MAP_JSON: JSON.stringify(config.nameIdMap || {}),
+    BUSINESS_REGION_MAP_JSON: JSON.stringify(config.businessRegionMap || {}),
     FEISHU_REPLY_ENABLED: config.replyEnabled ? "true" : "false",
   };
 }
@@ -103,6 +105,7 @@ export function createConfigRoutes({
             quoteBitableTableId: "",
             replyEnabled: false,
             nameIdMap: {},
+            businessRegionMap: {},
           };
       res.json(successResponse({ config, status: readConfigStatus(), adminAuthenticated }));
     });

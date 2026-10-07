@@ -21,7 +21,6 @@ test("long-connection command handlers use injected business services", async ()
       return [{ materialCode: "A-001" }];
     },
     completeDrawings: async () => [],
-    confirmDrawingOrders: async () => ({ result: [], missing: [] }),
     extractMaterialCodes: () => ["A-001"],
     queryUnclaimedDrawings: async () => ({ count: 0, items: [] }),
     sendReply: async (chatId, text) => replies.push({ chatId, text }),

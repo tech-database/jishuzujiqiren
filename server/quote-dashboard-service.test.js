@@ -14,7 +14,7 @@ test("normalizes the historical typo in the quote officer name", () => {
   assert.equal(normalizeQuoteOfficerName("胡燕绮"), "胡燕绮");
 });
 
-test("summarizes officers and compares quote and confirmed orders in a selected range", async () => {
+test("summarizes quotes and reads orders only from the quote statistics table", async () => {
   const configs = {
     quote: { key: "quote", label: "报价统计" },
     board: { key: "board", label: "胶板" },
@@ -26,6 +26,8 @@ test("summarizes officers and compares quote and confirmed orders in a selected 
       record({ 报价日期: "2026/07/29", 报价员: "杨利伟", 区域: "华东区", 业务: "谢广", 单价: 200, 总价: 2000 }),
       record({ 报价日期: "2026-07-08", 报价员: "朱海韵", 区域: "华南区", 业务: "李艳", 单价: 300, 总价: 3000 }),
       record({ 报价日期: "2026-06-30", 报价员: "邓翠萍", 区域: "华南区", 业务: "李艳", 单价: 900, 总价: 9000 }),
+      record({ 报价日期: "2026-07-29", 类型: "下单", 类别: "胶板", 区域: "华南区", 业务: "李艳", 总价: 2500 }),
+      record({ 报价日期: "2026-07-29", 类型: "下单", 类别: "油漆", 区域: "华东区", 业务: "谢广", 总价: 1500 }),
     ],
     board: [
       record({ 日期: 1785254400000, 是否下单: "是", 区域: "华南区", 业务: "李艳", 销售总价: "2,500" }),
@@ -60,7 +62,6 @@ test("summarizes officers and compares quote and confirmed orders in a selected 
       endDate: "2026-07-29",
     },
     {
-      drawingTableKeys: () => ["board", "paint"],
       getBitableConfig: (key) => configs[key],
       getTenantAccessToken: async () => "token",
       getBitableFieldMap: async (_token, config) => fieldMaps[config.key],
@@ -111,7 +112,7 @@ test("summarizes officers and compares quote and confirmed orders in a selected 
   );
   assert.deepEqual(result.regions, [
     {
-      name: "华南区",
+      name: "国际贸易",
       quoteCount: 2,
       orderCount: 1,
       quoteTotal: 4000,
@@ -120,7 +121,7 @@ test("summarizes officers and compares quote and confirmed orders in a selected 
       conversionRate: 62.5,
     },
     {
-      name: "华东区",
+      name: "西南区",
       quoteCount: 1,
       orderCount: 1,
       quoteTotal: 2000,
@@ -145,7 +146,6 @@ test("defaults the dashboard query range to today and rejects a reversed range",
     board: new Map(["日期", "是否下单", "区域", "业务", "数量", "销售单价"].map((name) => [name, 1])),
   };
   const dependencies = {
-    drawingTableKeys: () => ["board"],
     getBitableConfig: (key) => configs[key],
     getTenantAccessToken: async () => "token",
     getBitableFieldMap: async (_token, config) => fieldMaps[config.key],
@@ -174,7 +174,7 @@ test("defaults the dashboard query range to today and rejects a reversed range",
   const quoteCall = listCalls.find((call) => call.key === "quote");
   assert.equal(quoteCall.options.startDate, undefined);
   assert.equal(quoteCall.options.endDate, undefined);
-  assert.equal(listCalls.find((call) => call.key === "board").options.startDate, "2026-07-29");
+  assert.equal(listCalls.length, 1);
   await assert.rejects(
     queryQuoteDashboard(
       { now: new Date("2026-07-29T12:00:00+08:00"), startDate: "2026-07-30", endDate: "2026-07-29" },
@@ -182,6 +182,48 @@ test("defaults the dashboard query range to today and rejects a reversed range",
     ),
     /开始日期不能晚于结束日期/,
   );
+});
+
+test("filters the migrated quote date field and reads timestamp records", async () => {
+  const listCalls = [];
+  const quoteFields = new Map([
+    ["报价日期", 5],
+    ["报价员", 1],
+    ["区域", 1],
+    ["业务", 1],
+    ["单价", 2],
+    ["总价", 2],
+  ]);
+
+  const result = await queryQuoteDashboard(
+    {
+      now: new Date("2026-07-29T12:00:00+08:00"),
+      startDate: "2026-07-01",
+      endDate: "2026-07-29",
+    },
+    {
+      getBitableConfig: () => ({ key: "quote", label: "报价统计" }),
+      getTenantAccessToken: async () => "token",
+      getBitableFieldMap: async () => quoteFields,
+      listCachedBitableRecords: async (_token, _config, options) => {
+        listCalls.push(options);
+        return [record({
+          报价日期: Date.parse("2026-07-15T00:00:00+08:00"),
+          报价员: "杨利伟",
+          区域: "华南区",
+          业务: "李艳",
+          单价: 100,
+          总价: 1000,
+        })];
+      },
+    },
+  );
+
+  assert.equal(listCalls[0].startDate, "2026-07-01");
+  assert.equal(listCalls[0].endDate, "2026-07-29");
+  assert.equal(listCalls[0].dateFieldName, "报价日期");
+  assert.deepEqual(listCalls[0].fieldNames[0], "报价日期");
+  assert.deepEqual(result.summary, { fileCount: 1, unitPrice: 100, total: 1000 });
 });
 
 test("counts manually entered order records from the quote statistics table", async () => {
@@ -202,7 +244,6 @@ test("counts manually entered order records from the quote statistics table", as
       endDate: "2026-07-30",
     },
     {
-      drawingTableKeys: () => [],
       getBitableConfig: () => ({ key: "quote", label: "报价统计" }),
       getTenantAccessToken: async () => "token",
       getBitableFieldMap: async () => new Map(quoteFields.map((name) => [name, 1])),

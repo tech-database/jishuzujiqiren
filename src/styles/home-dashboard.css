@@ -3,3 +3,117 @@
 @import "./home-dashboard/operations.css";
 @import "./home-dashboard/performance.css";
 @import "./home-dashboard/motion-responsive.css";
+
+/* Shared light dashboard palette: matches the restrained white/gray control-center theme. */
+.home-active .app-main,
+.home-page {
+  color: #10233f;
+  background: #f4f6f9;
+}
+
+.home-page {
+  animation: none;
+}
+
+.home-dashboard {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-dashboard::before,
+.home-dashboard::after,
+.home-tech-atmosphere,
+.home-tech-edge {
+  display: none;
+}
+
+.home-dashboard-header h1 {
+  color: #0b1836;
+  text-shadow: none;
+}
+
+.home-metric-card,
+.home-panel,
+.home-performance-panel {
+  border-color: #e1e7ef;
+  background: #fff;
+  box-shadow: 0 4px 8px rgba(20, 43, 75, 0.06);
+}
+
+.home-metric-card::after,
+.home-panel::after,
+.home-performance-panel::after {
+  display: none;
+}
+
+.home-metric-copy span,
+.home-split-values span {
+  color: #334a68;
+}
+
+.home-metric-copy strong,
+.home-donut > div > strong,
+.home-completion-legend strong,
+.home-performance-metrics strong {
+  color: #0b1836;
+}
+
+.home-panel-header,
+.home-performance-panel > header,
+.home-performance-metrics {
+  border-bottom-color: #e7ecf2;
+}
+
+.home-panel-header h2,
+.home-performance-title {
+  color: #10233f;
+}
+
+.home-panel-header span,
+.home-performance-metrics small,
+.home-performance-content h4 small,
+.home-rank-head,
+.home-empty,
+.home-updated {
+  color: #7a8ba1;
+}
+
+.home-log-row,
+.home-rank-row,
+.home-region-row {
+  border-bottom-color: #e8edf3;
+  color: #243b5a;
+}
+
+.home-log-row.head {
+  color: #64748b;
+}
+
+.home-performance-range input,
+.home-performance-range button {
+  border-color: #d9e2ee;
+  color: #315174;
+  background: #fff;
+}
+
+.home-performance-panel h3,
+.home-performance-content h4 {
+  color: #087f9c;
+}
+
+.home-performance-panel.paint h3,
+.home-performance-panel.paint .home-performance-content h4 {
+  color: #5b50e9;
+}
+
+.home-ranking,
+.home-regions {
+  border-color: #e1e7ef;
+  background: #fbfcfe;
+}
+
+.home-person-card,
+.home-person-card.idle {
+  background: #fff;
+}

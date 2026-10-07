@@ -12,6 +12,8 @@ import {
   getBitableFieldMap,
   invalidateBitableRecordCache,
 } from "./bitable-client.js";
+import { applyBusinessRegion, regionFieldName } from "./business-region-service.js";
+import { readBusinessRegionMap } from "./runtime-config.js";
 
 export function createBitableWriteError(response, data, { batch = false } = {}) {
   const feishuCode = Number(data?.code);
@@ -229,9 +231,13 @@ export function createRecordImportService({ assertNoDuplicateMaterialCodesBefore
     });
     await assertNoDuplicateMaterialCodesBeforeCreate(token, tableConfig, fieldTypes, records);
     const uploadCache = new Map();
+    const businessRegionMap = readBusinessRegionMap();
     const convertedRecords = [];
     const warnings = Array.isArray(records.warnings) ? [...records.warnings] : [];
-    for (const record of records) {
+    for (const sourceRecord of records) {
+      const record = fieldTypes.has(regionFieldName)
+        ? applyBusinessRegion(sourceRecord, businessRegionMap)
+        : sourceRecord;
       const converted = await convertRecordByFieldTypes(
         record,
         fieldTypes,

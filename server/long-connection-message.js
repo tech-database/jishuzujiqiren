@@ -46,10 +46,6 @@ export function isDrawingCompleteCommand(message) {
   return mentionedTextCommand(message, /绘图完成|完成图|图纸完成/);
 }
 
-export function isOrderConfirmationCommand(message) {
-  return mentionedTextCommand(message, /下单确认|确认下单/);
-}
-
 export function isUnclaimedQueryCommand(message) {
   const content = String(message.content || "").trim();
   return (

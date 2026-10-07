@@ -7,6 +7,7 @@ export default [
     ignores: [
       "dist/**",
       "node_modules/**",
+      "outputs/**",
       "server/.runtime/**",
       "test-results/**",
       "playwright-report/**",

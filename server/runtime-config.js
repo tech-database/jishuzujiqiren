@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parse as parseDotenv } from "dotenv";
+import { defaultBusinessRegionMap } from "./business-region-defaults.js";
 
 const requiredConfig = [
   "FEISHU_APP_ID",
@@ -106,6 +107,28 @@ export function readNameIdMap() {
   }
 }
 
+export function readBusinessRegionMap() {
+  const rawValue = readRuntimeEnvValue("BUSINESS_REGION_MAP_JSON");
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    return { ...defaultBusinessRegionMap };
+  }
+  const parsed = readJsonRuntimeEnvValue("BUSINESS_REGION_MAP_JSON", null);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ...defaultBusinessRegionMap };
+  }
+  const normalized = Object.fromEntries(
+    Object.entries(parsed)
+      .map(([name, region]) => [String(name || "").trim(), String(region || "").trim()])
+      .filter(([name, region]) => name && region),
+  );
+  return normalized;
+}
+
+export function regionForBusinessName(name, businessRegionMap = readBusinessRegionMap()) {
+  const businessName = String(name || "").trim();
+  return businessName ? String(businessRegionMap?.[businessName] || "").trim() : "";
+}
+
 export function getConfigStatus() {
   const missing = requiredConfig.filter((key) => !readRuntimeEnvValue(key));
   return {
@@ -120,6 +143,7 @@ export function getConfigStatus() {
     tables: getBitableTablesStatus(),
     fieldMap: readFieldMap(),
     nameIdMap: readNameIdMap(),
+    businessRegionMap: readBusinessRegionMap(),
     replyEnabled: readRuntimeEnvValue("FEISHU_REPLY_ENABLED") === "true",
   };
 }

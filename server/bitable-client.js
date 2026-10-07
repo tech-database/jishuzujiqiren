@@ -155,7 +155,9 @@ export async function listCachedBitableRecords(token, tableConfig = getBitableCo
     : "";
   const cacheKey = `records:${tableConfig.key}:${tableConfig.appToken}:${tableConfig.tableId}:${rangeKey}:${dateFieldKey}:${fieldKey}:${options.filterConjunction || "and"}:${filterKey}`;
   return feishuCache.get(cacheKey, {
-    ttlMs: feishuCacheTtl.records,
+    ttlMs: Number.isFinite(options.cacheTtlMs)
+      ? Math.max(0, Number(options.cacheTtlMs))
+      : feishuCacheTtl.records,
     loader: () => listBitableRecords(token, tableConfig, options),
   });
 }
@@ -297,4 +299,3 @@ export function assertAllUpdatePlansApplied(actionName, outcome) {
   const errorText = outcome.errors[0] ? `。原因：${outcome.errors[0]}` : "";
   throw new Error(`${actionName}部分执行，${appliedText}未成功：${failedCodes.join("、")}${errorText}`);
 }
-

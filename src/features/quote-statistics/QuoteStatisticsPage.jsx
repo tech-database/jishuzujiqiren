@@ -57,6 +57,7 @@ const initialManualEntry = {
   date: localDate(),
   region: "",
   business: "",
+  materialCode: "",
   quantity: "",
   unitPrice: "",
 };
@@ -95,6 +96,7 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
         ...current,
         region: "",
         business: "",
+        materialCode: "",
         quantity: "",
         unitPrice: "",
       }));
@@ -219,6 +221,7 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
                       <FileSpreadsheet size={16} />
                       <span title={item.file.name}>{item.file.name}</span>
                       <small className={`quote-file-state ${item.tone}`}>{item.label}</small>
+                      <small className="quote-file-error" title={item.error}>{item.error}</small>
                       <small className="quote-file-size">{formatFileSize(item.file.size)}</small>
                       <button
                         type="button"
@@ -257,145 +260,6 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
             </div>
           </section>
 
-          <section className="quote-data-entry-card" aria-labelledby="quote-data-entry-title">
-            <div className="quote-data-entry-heading">
-              <span><FilePlus2 size={20} /></span>
-              <div>
-                <h2 id="quote-data-entry-title">数据新增</h2>
-                <p>报价和下单数据统一写入报价数据统计表，总价按数量 × 单价计算。</p>
-              </div>
-            </div>
-            <form className="quote-data-entry-form" onSubmit={submitManualEntry}>
-              <fieldset className="quote-data-entry-type">
-                <legend>数据类型</legend>
-                <button
-                  className={manualEntry.type === "报价" ? "active" : ""}
-                  type="button"
-                  aria-pressed={manualEntry.type === "报价"}
-                  onClick={() => updateManualEntry("type", "报价")}
-                >
-                  <BadgeDollarSign size={17} />
-                  报价数据新增
-                </button>
-                <button
-                  className={manualEntry.type === "下单" ? "active" : ""}
-                  type="button"
-                  aria-pressed={manualEntry.type === "下单"}
-                  onClick={() => updateManualEntry("type", "下单")}
-                >
-                  <ShoppingCart size={17} />
-                  下单数据新增
-                </button>
-              </fieldset>
-
-              <label>
-                <span>类别</span>
-                <select
-                  value={manualEntry.category}
-                  onChange={(event) => updateManualEntry("category", event.target.value)}
-                  disabled={manualBusy}
-                >
-                  <option value="胶板">胶板</option>
-                  <option value="油漆">油漆</option>
-                  <option value="软体">软体</option>
-                </select>
-              </label>
-              <label>
-                <span>报价员</span>
-                <select
-                  value={manualEntry.quoteOfficer}
-                  onChange={(event) => updateManualEntry("quoteOfficer", event.target.value)}
-                  disabled={manualBusy}
-                  required
-                >
-                  <option value="">请选择报价员</option>
-                  {quoteOfficerOptions.map((item) => (
-                    <option key={item.name} value={item.name}>{item.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>日期</span>
-                <input
-                  type="date"
-                  value={manualEntry.date}
-                  onChange={(event) => updateManualEntry("date", event.target.value)}
-                  disabled={manualBusy}
-                  required
-                />
-              </label>
-              <label>
-                <span>区域</span>
-                <input
-                  value={manualEntry.region}
-                  onChange={(event) => updateManualEntry("region", event.target.value)}
-                  disabled={manualBusy}
-                  placeholder="请输入区域"
-                  required
-                />
-              </label>
-              <label>
-                <span>业务</span>
-                <input
-                  value={manualEntry.business}
-                  onChange={(event) => updateManualEntry("business", event.target.value)}
-                  disabled={manualBusy}
-                  placeholder="请输入业务"
-                  required
-                />
-              </label>
-              <label>
-                <span>数量</span>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={manualEntry.quantity}
-                  onChange={(event) => updateManualEntry("quantity", event.target.value)}
-                  disabled={manualBusy}
-                  placeholder="0"
-                  required
-                />
-              </label>
-              <label>
-                <span>单价</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={manualEntry.unitPrice}
-                  onChange={(event) => updateManualEntry("unitPrice", event.target.value)}
-                  disabled={manualBusy}
-                  placeholder="0.00"
-                  required
-                />
-              </label>
-
-              <div className="quote-data-entry-submit">
-                <span>
-                  计算总价
-                  <strong>¥{formatAmount(manualTotal)}</strong>
-                </span>
-                <GlassButton
-                  type="submit"
-                  variant="primary"
-                  disabled={manualBusy || !quoteTableReady}
-                >
-                  {manualBusy ? <LoaderCircle className="quote-spin" size={17} /> : <FilePlus2 size={17} />}
-                  {manualBusy ? "正在新增" : `新增${manualEntry.type}数据`}
-                </GlassButton>
-              </div>
-            </form>
-            {manualFeedback && (
-              <div
-                className={`quote-data-entry-feedback ${manualFeedback.ok ? "success" : "error"}`}
-                role="status"
-              >
-                {manualFeedback.ok && <CheckCircle2 size={16} />}
-                <span>{manualFeedback.text}</span>
-              </div>
-            )}
-          </section>
         </div>
 
         <aside className="quote-rules-panel">
@@ -404,10 +268,10 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
             <h2>统计规则</h2>
           </div>
           <ul>
-            <li><UserRound size={16} /><span>区域、业务从每份清单自动读取</span></li>
+            <li><UserRound size={16} /><span>区域统一按业务从人员页面匹配</span></li>
             <li><BadgeDollarSign size={16} /><span>单价为“销售单价”列合计</span></li>
             <li><BadgeDollarSign size={16} /><span>总价为每行“数量 × 销售单价”之和</span></li>
-            <li><CalendarDays size={16} /><span>每份清单生成一条当日记录</span></li>
+            <li><CalendarDays size={16} /><span>报价每份汇总 1 条；下单每行写入 1 条</span></li>
           </ul>
           <div className={`quote-table-state ${quoteTableReady ? "ready" : "pending"}`}>
             <span>{quoteTableReady ? "报价统计表已配置" : "等待填写报价统计表 ID"}</span>
@@ -481,6 +345,9 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
                           已忽略 {row.ignoredInvalidRowCount} 条异常数据
                         </small>
                       )}
+                      {row.status === "ready" && row.recordCount > 1 && (
+                        <small className="quote-row-warning">将写入 {row.recordCount} 条记录</small>
+                      )}
                       {row.error && <small className="quote-row-error">{row.error}</small>}
                     </td>
                   </tr>
@@ -490,6 +357,150 @@ export default function QuoteStatisticsPage({ controller, quoteTableReady }) {
           </div>
         </section>
       )}
+
+      <section className="quote-data-entry-card" aria-labelledby="quote-data-entry-title">
+        <div className="quote-data-entry-heading">
+          <span><FilePlus2 size={20} /></span>
+          <div>
+            <h2 id="quote-data-entry-title">数据新增</h2>
+            <p>报价和下单数据统一写入报价数据统计表，总价按数量 × 单价计算。</p>
+          </div>
+        </div>
+        <form className="quote-data-entry-form" onSubmit={submitManualEntry}>
+          <fieldset className="quote-data-entry-type">
+            <legend>数据类型</legend>
+            <button
+              className={manualEntry.type === "报价" ? "active" : ""}
+              type="button"
+              aria-pressed={manualEntry.type === "报价"}
+              onClick={() => updateManualEntry("type", "报价")}
+            >
+              <BadgeDollarSign size={17} />
+              报价数据新增
+            </button>
+            <button
+              className={manualEntry.type === "下单" ? "active" : ""}
+              type="button"
+              aria-pressed={manualEntry.type === "下单"}
+              onClick={() => updateManualEntry("type", "下单")}
+            >
+              <ShoppingCart size={17} />
+              下单数据新增
+            </button>
+          </fieldset>
+
+          <label>
+            <span>类别</span>
+            <select
+              value={manualEntry.category}
+              onChange={(event) => updateManualEntry("category", event.target.value)}
+              disabled={manualBusy}
+            >
+              <option value="胶板">胶板</option>
+              <option value="油漆">油漆</option>
+              <option value="软体">软体</option>
+            </select>
+          </label>
+          <label>
+            <span>报价员</span>
+            <select
+              value={manualEntry.quoteOfficer}
+              onChange={(event) => updateManualEntry("quoteOfficer", event.target.value)}
+              disabled={manualBusy}
+              required
+            >
+              <option value="">请选择报价员</option>
+              {quoteOfficerOptions.map((item) => (
+                <option key={item.name} value={item.name}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>日期</span>
+            <input
+              type="date"
+              value={manualEntry.date}
+              onChange={(event) => updateManualEntry("date", event.target.value)}
+              disabled={manualBusy}
+              required
+            />
+          </label>
+          <label>
+            <span>区域</span>
+            <input value="按业务自动匹配" disabled />
+          </label>
+          <label>
+            <span>业务</span>
+            <input
+              value={manualEntry.business}
+              onChange={(event) => updateManualEntry("business", event.target.value)}
+              disabled={manualBusy}
+              placeholder="请输入业务"
+              required
+            />
+          </label>
+          <label>
+            <span>料件编号</span>
+            <input
+              value={manualEntry.materialCode}
+              onChange={(event) => updateManualEntry("materialCode", event.target.value)}
+              disabled={manualBusy}
+              placeholder="请输入料件编号"
+              required
+            />
+          </label>
+          <label>
+            <span>数量</span>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={manualEntry.quantity}
+              onChange={(event) => updateManualEntry("quantity", event.target.value)}
+              disabled={manualBusy}
+              placeholder="0"
+              required
+            />
+          </label>
+          <label>
+            <span>单价</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={manualEntry.unitPrice}
+              onChange={(event) => updateManualEntry("unitPrice", event.target.value)}
+              disabled={manualBusy}
+              placeholder="0.00"
+              required
+            />
+          </label>
+
+          <div className="quote-data-entry-submit">
+            <span>
+              计算总价
+              <strong>¥{formatAmount(manualTotal)}</strong>
+            </span>
+            <GlassButton
+              type="submit"
+              variant="primary"
+              disabled={manualBusy || !quoteTableReady}
+            >
+              {manualBusy ? <LoaderCircle className="quote-spin" size={17} /> : <FilePlus2 size={17} />}
+              {manualBusy ? "正在新增" : `新增${manualEntry.type}数据`}
+            </GlassButton>
+          </div>
+        </form>
+        {manualFeedback && (
+          <div
+            className={`quote-data-entry-feedback ${manualFeedback.ok ? "success" : "error"}`}
+            role="status"
+          >
+            {manualFeedback.ok && <CheckCircle2 size={16} />}
+            <span>{manualFeedback.text}</span>
+          </div>
+        )}
+      </section>
     </PageTransition>
   );
 }

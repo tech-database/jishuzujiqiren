@@ -10,7 +10,6 @@ import {
   isGetIdCommand,
   isHelpCommand,
   isMentionedMessage,
-  isOrderConfirmationCommand,
   isStatusSyncCommand,
   isUnclaimedQueryCommand,
 } from "./long-connection-message.js";
@@ -57,9 +56,6 @@ export function createLongConnectionDispatcher({
       }
       if (isMentionedMessage(message) && isDrawingCompleteCommand(message)) {
         return handlers.runOnce(message, "drawing-complete", () => handlers.drawingComplete(message));
-      }
-      if (isOrderConfirmationCommand(message)) {
-        return handlers.runOnce(message, "order-confirmation", () => handlers.orderConfirmation(message));
       }
       if (isMentionedMessage(message) && isUnclaimedQueryCommand(message)) {
         return handlers.unclaimedQuery(message);

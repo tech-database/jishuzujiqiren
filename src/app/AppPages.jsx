@@ -1,6 +1,7 @@
 import React from "react";
 import { RefreshCw } from "lucide-react";
 import {
+  BusinessRegionsCenter,
   CommandCenter,
   ConnectionManagementCenter,
   DataAnalyticsCenter,
@@ -10,7 +11,6 @@ import {
   HomeDashboard,
   MappingStudio,
   MonitoringCenter,
-  OrderConfirmationCenter,
   PeopleMappingCenter,
   QuoteDashboard,
   QuoteStatisticsCenter,
@@ -22,12 +22,12 @@ const keepAliveTabs = new Set([
   "mapping",
   "commands",
   "people",
+  "regions",
   "analytics",
   "quote-home",
   "quotes",
   "upload",
   "drawing",
-  "orders",
 ]);
 
 export function AppPages({ activeTab, adminAuthenticated, controllers }) {
@@ -66,6 +66,17 @@ export function AppPages({ activeTab, adminAuthenticated, controllers }) {
             setTargetTable={setTargetTable}
             targetTable={targetTable}
           />
+        </React.Suspense>
+      </KeepAlivePage>
+
+      <KeepAlivePage
+        activeTab={activeTab}
+        adminAllowed={adminAuthenticated}
+        tab="regions"
+        visitedTabs={visitedTabsRef.current}
+      >
+        <React.Suspense fallback={<div className="region-directory-skeleton" />}>
+          <BusinessRegionsCenter controller={config} />
         </React.Suspense>
       </KeepAlivePage>
 
@@ -148,16 +159,6 @@ export function AppPages({ activeTab, adminAuthenticated, controllers }) {
             configReady={config.configReady}
             controller={drawing}
             nameIdRows={config.nameIdRows}
-          />
-        </React.Suspense>
-      </KeepAlivePage>
-
-      <KeepAlivePage activeTab={activeTab} tab="orders" visitedTabs={visitedTabsRef.current}>
-        <React.Suspense fallback={<div className="glass-skeleton assignment-skeleton" />}>
-          <OrderConfirmationCenter
-            configReady={config.configReady}
-            setTargetTable={setTargetTable}
-            targetTable={targetTable}
           />
         </React.Suspense>
       </KeepAlivePage>
